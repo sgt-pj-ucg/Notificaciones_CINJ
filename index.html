@@ -78,6 +78,18 @@ a { color: var(--azul-medio); }
   font-size: 12px; color: #A9BDD4; letter-spacing: .06em; text-transform: uppercase;
 }
 .encabezado-acciones { margin-left: auto; display: flex; gap: var(--e2); align-items: center; }
+.estado-servicio {
+  font-size: 12px; color: #A9BDD4; display: inline-flex; align-items: center; gap: 6px;
+  padding-right: var(--e1); white-space: nowrap;
+}
+.estado-servicio:empty { display: none; }
+.estado-servicio::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
+}
+.estado-servicio.ok { color: #7FD1A8; }
+.estado-servicio.pendiente { color: #F0C26B; }
+.estado-servicio.trabajando { color: #A9BDD4; }
+.estado-servicio.error { color: #F0A79B; }
 
 /* ---------- Navegación por etapas ---------- */
 .etapas {
@@ -363,6 +375,8 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
       <div class="subtitulo-app">Centro Integrado de Notificaciones Judiciales · La Serena – Coquimbo</div>
     </div>
     <div class="encabezado-acciones">
+      <span class="estado-servicio" id="estadoServicio"></span>
+      <button class="boton boton-claro boton-pequeno" id="btnActualizar" type="button">Actualizar</button>
       <button class="boton boton-claro boton-pequeno" id="btnConfiguracion" type="button">Configuración</button>
       <button class="boton boton-claro boton-pequeno" id="btnRespaldar" type="button">Respaldar</button>
     </div>
@@ -868,7 +882,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     configuracion: {
       notificador: 'ALEX MALDONADO DONOSO',
       iniciales: 'AMD',
-      centro: 'Centro Integrado de Notificaciones Judiciales de La Serena – Coquimbo'
+      // Identifica al FUNCIONARIO que opera la plataforma, no al notificador que firma.
+      // Debe ser distinto en cada equipo: de él depende el nombre del archivo propio
+      // dentro de la carpeta compartida.
+      identificadorFuncionario: '',
+      centro: 'Centro Integrado de Notificaciones Judiciales de La Serena – Coquimbo',
+      urlServicio: '',      // dirección de la aplicación web de Apps Script
+      claveServicio: ''     // clave compartida; no viaja en el código publicado
     }
   };
 
@@ -892,7 +912,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function guardarAlmacen() {
     try {
       localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(almacen));
-      programarEscritura();   // si hay carpeta conectada, replica el archivo propio
+      programarEscritura();       // si hay carpeta conectada, replica el archivo propio
+      programarEnvioServicio();   // si hay planilla configurada, envía los cambios
       return true;
     } catch (e) {
       mostrarMensaje('No se pudo guardar en este equipo (' + e.name +
@@ -949,8 +970,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function identificador() {
-    var iniciales = (almacen.configuracion.iniciales || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    return iniciales || 'SININICIALES';
+    var base = almacen.configuracion.identificadorFuncionario || almacen.configuracion.iniciales || '';
+    return base.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'SINIDENTIFICAR';
   }
 
   function nombreArchivoPropio() {
@@ -1047,14 +1068,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       });
   }
 
+  // Siempre se LEE la carpeta antes de escribir: de lo contrario, al abrir la plataforma
+  // desde otro equipo se sobrescribiría el propio archivo antes de conocer su contenido.
   function sincronizar(avisar) {
     if (!carpeta.conectada) return Promise.resolve(false);
-    return escribirArchivoPropio()
-      .then(function () { return leerCarpeta(); })
+    return leerCarpeta()
       .then(function (listas) {
         var mios = almacen.casos.filter(function (c) { return !esAjeno(c); });
         almacen.casos = fusionarCasos(listas.concat([mios]));
         almacen.casos.forEach(function (c) { recalcularEstado(c); });
+        return escribirArchivoPropio();
+      })
+      .then(function () {
         carpeta.ultima = new Date();
         guardarAlmacen();
         refrescar();
@@ -1064,6 +1089,28 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         }
         return true;
       });
+  }
+
+  // Avisa si ya hay un archivo con las mismas iniciales y con casos desconocidos:
+  // señal de que otro funcionario está usando el mismo identificador.
+  function avisarSiIdentificadorEnUso() {
+    return carpeta.handle.getFileHandle(nombreArchivoPropio())
+      .then(function (h) { return h.getFile(); })
+      .then(function (f) { return f.text(); })
+      .then(function (t) {
+        var conocidos = {};
+        almacen.casos.forEach(function (c) { conocidos[claveCaso(c)] = true; });
+        var desconocidos = (JSON.parse(t).casos || []).filter(function (c) {
+          return !conocidos[claveCaso(c)];
+        });
+        if (desconocidos.length) {
+          mostrarMensaje('Atención: en la carpeta ya existe ' + nombreArchivoPropio() + ' con ' +
+            desconocidos.length + ' caso(s) que no tiene en este equipo. Si es trabajo suyo hecho ' +
+            'en otro equipo, continúe. Si es de otro funcionario, cambie sus iniciales en Configuración.',
+            'error');
+        }
+      })
+      .catch(function () { });   // no existe el archivo: identificador libre
   }
 
   function conectarCarpeta() {
@@ -1078,6 +1125,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         carpeta.conectada = true;
         return guardarHandle(handle).catch(function () { });
       })
+      .then(function () { return avisarSiIdentificadorEnUso(); })
       .then(function () { return sincronizar(true); })
       .then(function () { refrescar(); return true; })
       .catch(function (e) {
@@ -1106,6 +1154,132 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         return sincronizar(false);
       });
     }).catch(function () { return false; });
+  }
+
+  /* =========================================================
+     3 ter. Servicio de datos (planilla compartida)
+
+     La plataforma consulta y guarda en una planilla a través de un
+     Apps Script publicado. No hay que conectar carpetas ni iniciar sesión:
+     todos los funcionarios ven la misma información desde cualquier equipo.
+     ========================================================= */
+
+  var servicio = { ocupado: false, ultima: null, error: '', pendientes: false };
+  // Mientras se aplica lo que llega de la planilla no hay cambios propios que enviar.
+  var aplicandoRemoto = false;
+
+  function hayServicio() {
+    return !!(almacen.configuracion.urlServicio && almacen.configuracion.claveServicio);
+  }
+
+  // Se envía como texto plano a propósito: evita la verificación previa de CORS,
+  // que Apps Script no responde.
+  function llamarServicio(cuerpo) {
+    if (!hayServicio()) return Promise.reject(new Error('El servicio de datos no está configurado.'));
+    cuerpo.clave = almacen.configuracion.claveServicio;
+    return fetch(almacen.configuracion.urlServicio, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(cuerpo),
+      redirect: 'follow'
+    }).then(function (respuesta) {
+      if (!respuesta.ok) throw new Error('El servicio respondió ' + respuesta.status + '.');
+      return respuesta.json();
+    }).then(function (datos) {
+      if (!datos || datos.ok !== true) throw new Error((datos && datos.error) || 'Respuesta inesperada.');
+      return datos;
+    });
+  }
+
+  function incorporarCasosDelServicio(casos) {
+    var locales = almacen.casos;
+    almacen.casos = fusionarCasos([casos || [], locales]);
+    almacen.casos.forEach(function (c) { recalcularEstado(c); });
+  }
+
+  function sincronizarServicio(avisar) {
+    if (!hayServicio()) return Promise.resolve(false);
+    servicio.ocupado = true;
+    refrescarEstadoServicio();
+    // Se envía lo local y se recibe el consolidado: el servicio resuelve el orden.
+    return llamarServicio({ accion: 'guardar', casos: almacen.casos })
+      .then(function (datos) {
+        aplicandoRemoto = true;
+        almacen.casos = (datos.casos || []).map(function (c) { return c; });
+        almacen.casos.forEach(function (c) { recalcularEstado(c); });
+        servicio.error = '';
+        servicio.pendientes = false;
+        servicio.ultima = new Date();
+        guardarAlmacen();
+        aplicandoRemoto = false;
+        refrescar();
+        if (avisar) {
+          mostrarMensaje('Planilla sincronizada: ' + almacen.casos.length + ' caso(s).', 'ok');
+        }
+        return true;
+      })
+      .catch(function (e) {
+        servicio.error = e.message;
+        servicio.pendientes = true;
+        if (avisar) mostrarMensaje('No se pudo sincronizar: ' + e.message, 'error');
+        return false;
+      })
+      .then(function (resultado) {
+        servicio.ocupado = false;
+        refrescarEstadoServicio();
+        return resultado;
+      });
+  }
+
+  function cargarDesdeServicio(avisar) {
+    if (!hayServicio()) return Promise.resolve(false);
+    servicio.ocupado = true;
+    refrescarEstadoServicio();
+    return llamarServicio({ accion: 'listar' })
+      .then(function (datos) {
+        aplicandoRemoto = true;
+        incorporarCasosDelServicio(datos.casos);
+        if (datos.tribunales && datos.tribunales.length) almacen.tribunales = datos.tribunales;
+        servicio.error = '';
+        servicio.ultima = new Date();
+        guardarAlmacen();
+        aplicandoRemoto = false;
+        refrescar();
+        if (avisar) mostrarMensaje('Información actualizada desde la planilla.', 'ok');
+        return true;
+      })
+      .catch(function (e) {
+        servicio.error = e.message;
+        if (avisar) mostrarMensaje('No se pudo leer la planilla: ' + e.message, 'error');
+        return false;
+      })
+      .then(function (resultado) {
+        servicio.ocupado = false;
+        refrescarEstadoServicio();
+        return resultado;
+      });
+  }
+
+  var temporizadorServicio = null;
+  function programarEnvioServicio() {
+    if (!hayServicio() || aplicandoRemoto) return;
+    servicio.pendientes = true;
+    refrescarEstadoServicio();
+    clearTimeout(temporizadorServicio);
+    temporizadorServicio = setTimeout(function () { sincronizarServicio(false); }, 1500);
+  }
+
+  function refrescarEstadoServicio() {
+    var caja = $('#estadoServicio');
+    if (!caja) return;
+    if (!hayServicio()) { caja.textContent = ''; caja.className = 'estado-servicio'; return; }
+    if (servicio.ocupado) { caja.textContent = 'Guardando…'; caja.className = 'estado-servicio trabajando'; return; }
+    if (servicio.error) { caja.textContent = 'Sin conexión con la planilla'; caja.className = 'estado-servicio error'; return; }
+    if (servicio.pendientes) { caja.textContent = 'Cambios por guardar'; caja.className = 'estado-servicio pendiente'; return; }
+    caja.textContent = 'Planilla al día' + (servicio.ultima ? ' · ' +
+      String(servicio.ultima.getHours()).padStart(2, '0') + ':' +
+      String(servicio.ultima.getMinutes()).padStart(2, '0') : '');
+    caja.className = 'estado-servicio ok';
   }
 
   /* =========================================================
@@ -2189,7 +2363,33 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       campoTexto('cfgIniciales', 'Iniciales para la columna de combinación', almacen.configuracion.iniciales,
         { ayuda: 'Se agregan al final del campo "RIT Nombre - XXX".' }) +
       '</div>' +
-      '<div class="seccion-ficha"><h4>Carpeta compartida</h4>' + bloqueCarpeta() + '</div>' +
+      '<div class="seccion-ficha"><h4>Quién usa esta plataforma</h4>' +
+      campoTexto('cfgIdentificador', 'Sus iniciales como funcionario',
+        almacen.configuracion.identificadorFuncionario, {
+          marcador: 'JCO',
+          ayuda: 'Identifican su archivo dentro de la carpeta compartida. Deben ser distintas ' +
+                 'en cada equipo: si dos funcionarios usan las mismas, se sobrescriben el trabajo.'
+        }) +
+      '<div class="aviso aviso-info"><div>Su archivo se llamará <strong>' +
+      escapar(nombreArchivoPropio()) + '</strong>.</div></div></div>' +
+      '<div class="seccion-ficha"><h4>Planilla compartida</h4>' +
+      '<div class="aviso aviso-info"><div>Con la planilla configurada, todo lo que registre queda ' +
+      'disponible de inmediato para el resto del centro, desde cualquier equipo y sin conectar nada más.' +
+      '</div></div>' +
+      campoTexto('cfgUrlServicio', 'Dirección del servicio', almacen.configuracion.urlServicio,
+        { marcador: 'https://script.google.com/macros/s/…/exec',
+          ayuda: 'La entrega la implementación del Apps Script publicado.' }) +
+      campoTexto('cfgClaveServicio', 'Clave del servicio', almacen.configuracion.claveServicio,
+        { ayuda: 'La misma que figura en el script. No viaja en el código publicado.' }) +
+      '<div style="display:flex;gap:var(--e2);flex-wrap:wrap">' +
+      '<button class="boton boton-secundario" type="button" id="btnProbarServicio">Probar conexión</button>' +
+      (hayServicio() ? '<button class="boton boton-secundario" type="button" id="btnTraerServicio">' +
+        'Traer información</button>' : '') + '</div>' +
+      (servicio.error ? '<div class="aviso aviso-error" style="margin-top:var(--e2)"><div>' +
+        escapar(servicio.error) + '</div></div>' : '') +
+      '</div>' +
+      '<div class="seccion-ficha"><h4>Carpeta compartida (alternativa sin planilla)</h4>' +
+      bloqueCarpeta() + '</div>' +
       '<div class="seccion-ficha"><h4>Datos guardados</h4>' +
       '<div class="aviso aviso-info"><div>La información se guarda en este equipo. Si conecta una ' +
       'carpeta compartida, además se replica en ella y queda disponible para el resto del centro.</div></div>' +
@@ -2202,10 +2402,42 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#btnGuardarConfiguracion').addEventListener('click', function () {
       almacen.configuracion.notificador = $('#f-cfgNotificador').value.trim();
       almacen.configuracion.iniciales = $('#f-cfgIniciales').value.trim().toUpperCase();
+      almacen.configuracion.identificadorFuncionario =
+        $('#f-cfgIdentificador').value.trim().toUpperCase();
+      almacen.configuracion.urlServicio = $('#f-cfgUrlServicio').value.trim();
+      almacen.configuracion.claveServicio = $('#f-cfgClaveServicio').value.trim();
       guardarAlmacen(); refrescar(); cerrarFicha();
       mostrarMensaje('Configuración guardada.', 'ok');
+      if (hayServicio()) cargarDesdeServicio(false);
     });
     conectarEventosCarpeta();
+
+    $('#btnProbarServicio').addEventListener('click', function () {
+      var url = $('#f-cfgUrlServicio').value.trim();
+      var clave = $('#f-cfgClaveServicio').value.trim();
+      if (!url || !clave) { mostrarMensaje('Indique la dirección y la clave del servicio.', 'error'); return; }
+      almacen.configuracion.urlServicio = url;
+      almacen.configuracion.claveServicio = clave;
+      mostrarMensaje('Probando conexión…', '');
+      llamarServicio({ accion: 'probar' })
+        .then(function (datos) {
+          servicio.error = '';
+          guardarAlmacen();
+          mostrarMensaje('Conexión correcta. La planilla tiene ' + datos.casos + ' caso(s).', 'ok');
+          abrirConfiguracion();
+        })
+        .catch(function (e) {
+          servicio.error = e.message;
+          mostrarMensaje('No se pudo conectar: ' + e.message, 'error');
+          abrirConfiguracion();
+        });
+    });
+    if ($('#btnTraerServicio')) {
+      $('#btnTraerServicio').addEventListener('click', function () {
+        cargarDesdeServicio(true).then(function () { cerrarFicha(); });
+      });
+    }
+
     $('#btnRestaurar').addEventListener('click', function () { $('#archivoRespaldo').click(); });
     $('#archivoRespaldo').addEventListener('change', function (evento) {
       if (evento.target.files[0]) { restaurar(evento.target.files[0]); cerrarFicha(); }
@@ -2213,9 +2445,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#btnBorrarTodo').addEventListener('click', function () {
       if (!confirm('Se borrarán todos los casos guardados en este equipo. ' +
                    '¿Descargó un respaldo? Esta acción no se puede deshacer.')) return;
+      // Con la carpeta conectada, borrar en local no basta: al sincronizar volverían
+      // desde los archivos. Se desconecta para que el borrado sea el esperado.
+      if (carpeta.conectada) desconectarCarpeta();
       almacen.casos = []; almacen.cargas = [];
       guardarAlmacen(); refrescar(); cerrarFicha();
-      mostrarMensaje('Datos borrados.', '');
+      mostrarMensaje('Datos borrados de este equipo. Los archivos de la carpeta no se tocaron.', '');
     });
 
     $('#velo').classList.add('visible');
@@ -2296,6 +2531,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#btnInformeJefatura').addEventListener('click', generarInformeJefatura);
     $('#btnRespaldar').addEventListener('click', respaldar);
     $('#btnConfiguracion').addEventListener('click', abrirConfiguracion);
+    $('#btnActualizar').addEventListener('click', function () {
+      if (hayServicio()) cargarDesdeServicio(true);
+      else if (carpeta.conectada) sincronizar(true);
+      else mostrarMensaje('Configure la planilla compartida para trabajar con el resto del centro.', '');
+    });
 
     $('#btnAgregarTribunal').addEventListener('click', function () {
       var nombre = $('#nuevoTribunalNombre').value.trim();
@@ -2322,13 +2562,48 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       carpeta.handle = handle; carpeta.conectada = true; return sincronizar(false);
     },
     sincronizar: sincronizar, fusionarCasos: fusionarCasos, identificador: identificador,
-    nombreArchivoPropio: nombreArchivoPropio, hayApiCarpeta: hayApiCarpeta, esAjeno: esAjeno
+    nombreArchivoPropio: nombreArchivoPropio, hayApiCarpeta: hayApiCarpeta, esAjeno: esAjeno,
+    hayServicio: hayServicio, llamarServicio: llamarServicio, servicio: function () { return servicio; },
+    sincronizarServicio: sincronizarServicio, cargarDesdeServicio: cargarDesdeServicio
   };
+
+  // Permite dejar configurado a un funcionario con un solo enlace:
+  //   …/#s=<dirección del servicio>&k=<clave>&f=<iniciales>
+  // Los datos del fragmento no viajan al servidor donde está publicada la plataforma.
+  function leerConfiguracionDelEnlace() {
+    var hash = location.hash.replace(/^#/, '');
+    if (!hash) return false;
+    var partes = {};
+    hash.split('&').forEach(function (par) {
+      var i = par.indexOf('=');
+      if (i > 0) partes[par.slice(0, i)] = decodeURIComponent(par.slice(i + 1));
+    });
+    if (!partes.s && !partes.k && !partes.f) return false;
+    if (partes.s) almacen.configuracion.urlServicio = partes.s;
+    if (partes.k) almacen.configuracion.claveServicio = partes.k;
+    if (partes.f) almacen.configuracion.identificadorFuncionario = partes.f.toUpperCase();
+    history.replaceState(null, '', location.pathname + location.search);
+    guardarAlmacen();
+    mostrarMensaje('Plataforma configurada. Ya puede trabajar con la planilla del centro.', 'ok');
+    return true;
+  }
 
   cargarAlmacen();
   conectarEventos();
+  leerConfiguracionDelEnlace();
   refrescar();
-  reconectarCarpeta();
+  refrescarEstadoServicio();
+  if (hayServicio()) cargarDesdeServicio(false);
+  else reconectarCarpeta();
+
+  // Si el enlace de configuración se pega con la plataforma ya abierta, el navegador
+  // no recarga la página: hay que atender el cambio de fragmento igualmente.
+  window.addEventListener('hashchange', function () {
+    if (leerConfiguracionDelEnlace()) {
+      refrescarEstadoServicio();
+      if (hayServicio()) cargarDesdeServicio(true);
+    }
+  });
 })();
 
 </script>
