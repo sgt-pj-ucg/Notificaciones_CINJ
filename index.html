@@ -90,36 +90,47 @@ a { color: var(--azul-medio); }
 .estado-servicio.trabajando { color: #A9BDD4; }
 .estado-servicio.error { color: #F0A79B; }
 
-/* ---------- Navegación por etapas ---------- */
+/* ---------- Navegación por etapas: tarjetas, no pestañas planas ---------- */
 .etapas {
-  background: var(--superficie);
+  background: var(--fondo);
   border-bottom: 1px solid var(--borde);
   position: sticky; top: 0; z-index: 40;
 }
 .etapas-interior {
-  max-width: 1440px; margin: 0 auto; padding: 0 var(--e4);
-  display: flex; gap: var(--e1); overflow-x: auto; scrollbar-width: thin;
+  max-width: 1440px; margin: 0 auto; padding: var(--e3) var(--e4);
+  display: flex; gap: var(--e2); overflow-x: auto; scrollbar-width: thin;
 }
 .etapa {
-  appearance: none; background: none; border: 0; cursor: pointer;
-  font: inherit; color: var(--texto-suave);
-  padding: var(--e3) var(--e3) calc(var(--e3) - 3px);
-  border-bottom: 3px solid transparent;
+  appearance: none; cursor: pointer; font: inherit; font-weight: 500;
+  color: var(--texto-suave); background: var(--superficie);
+  border: 1px solid var(--borde); border-radius: 12px;
+  padding: 11px var(--e3);
   display: flex; align-items: center; gap: var(--e2); white-space: nowrap;
-  transition: color var(--transicion), border-color var(--transicion);
+  box-shadow: 0 1px 2px rgba(15,42,74,.05);
+  transition: color var(--transicion), background var(--transicion),
+              border-color var(--transicion), box-shadow var(--transicion), transform var(--transicion);
 }
-.etapa:hover { color: var(--azul-medio); }
-.etapa.activa { color: var(--azul-profundo); border-bottom-color: var(--acento); font-weight: 600; }
+.etapa:hover {
+  color: var(--azul-profundo); border-color: var(--azul-medio);
+  box-shadow: 0 4px 10px rgba(15,42,74,.1); transform: translateY(-1px);
+}
+.etapa.activa {
+  color: #fff; font-weight: 600; background: var(--azul-profundo); border-color: var(--azul-profundo);
+  box-shadow: 0 6px 16px rgba(15,42,74,.28);
+}
 .etapa-numero {
   width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
   background: var(--azul-claro); color: var(--azul-medio);
   display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  transition: background var(--transicion), color var(--transicion);
 }
-.etapa.activa .etapa-numero { background: var(--azul-profundo); color: #fff; }
+.etapa.activa .etapa-numero { background: var(--acento); color: #fff; }
 .etapa-cuenta {
   background: var(--azul-claro); color: var(--azul-medio);
   border-radius: 20px; padding: 1px 8px; font-size: 12px; font-weight: 600;
+  transition: background var(--transicion), color var(--transicion);
 }
+.etapa.activa .etapa-cuenta { background: rgba(255,255,255,.2); color: #fff; }
 
 /* ---------- Estructura ---------- */
 .contenido { max-width: 1440px; margin: 0 auto; padding: var(--e4); }
@@ -464,6 +475,12 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
   font-family: 'Times New Roman', Georgia, serif; font-size: 12pt; line-height: 1.55; color: #111;
 }
 .hoja-impresion p { margin: 0 0 10pt; }
+.hoja-impresion table.tabla-doc {
+  border-collapse: collapse; width: 100%; margin: 0 0 10pt; font-size: 11pt;
+}
+.hoja-impresion table.tabla-doc td {
+  border: 1px solid #999; padding: 5pt 8pt; vertical-align: top;
+}
 .aviso-fidelidad {
   max-width: 210mm; width: 94vw; margin: var(--e3) 0 0; padding: 10px 16px;
   background: rgba(255,255,255,.92); border-radius: 8px; font-size: 12.5px; color: #4A4F57;
@@ -553,7 +570,7 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 <nav class="etapas" aria-label="Etapas del proceso">
   <div class="etapas-interior">
     <button class="etapa activa" type="button" data-vista="ingesta">
-      <span class="etapa-numero">1</span> Ingesta
+      <span class="etapa-numero">1</span> Ingreso
     </button>
     <button class="etapa" type="button" data-vista="casos">
       <span class="etapa-numero">2</span> Completar datos
@@ -574,7 +591,7 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
   <!-- ================= ETAPA 1 · INGESTA ================= -->
   <section class="vista activa" id="vista-ingesta">
     <div class="cabecera-vista">
-      <h2>Ingesta de Planilla 1</h2>
+      <h2>Ingreso de Planilla 1</h2>
       <p>Cargue el archivo Excel enviado por jefatura. Cada fila se incorpora como un caso nuevo.
          La carga es acumulativa: los casos ya trabajados no se sobrescriben, se identifican por RIT + correlativo.</p>
     </div>
@@ -632,8 +649,8 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
   <section class="vista" id="vista-documentos">
     <div class="cabecera-vista">
       <h2>Documentos</h2>
-      <p>Cada documento se revisa y genera caso por caso, para no perder trazabilidad. Abra la ficha del
-         caso para generarlo; aquí encuentra rápido lo que ya se ha producido.</p>
+      <p>Cada documento se genera desde la ficha del caso, uno por uno. Esta sección es la trazabilidad
+         de lo ya producido: acceda a los casos pendientes desde "Completar datos".</p>
     </div>
 
     <div class="tarjeta">
@@ -643,18 +660,6 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
           texto listo para copiar y pegar en el envío manual.</div>
       </div>
       <div id="historialDocumentos"></div>
-    </div>
-
-    <div class="tarjeta">
-      <div class="tarjeta-titulo">Casos listos para generar</div>
-      <div id="listaDocumentos"></div>
-    </div>
-
-    <div class="tarjeta">
-      <div class="tarjeta-titulo">Casos para devolver a jefatura</div>
-      <p class="campo-ayuda">Sin nombre o sin teléfono válido: no se pueden notificar. Abra la ficha para
-        generar la certificación que explica el motivo.</p>
-      <div id="listaNoNotificables"></div>
     </div>
   </section>
 
@@ -1084,7 +1089,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       : (String(caso.documentos || '').trim() ? [caso.documentos.trim()] : []);
     if (!lista.length) return '';
     if (lista.length === 1) return lista[0];
-    return lista.map(function (texto, i) { return (i + 1) + ') ' + texto; }).join('; ');
+    // Salto de línea entre cada uno: docxtemplater (linebreaks:true) lo convierte en
+    // <w:br/> real, así quedan en filas separadas en el Word y no todos corridos.
+    return lista.map(function (texto, i) { return (i + 1) + ') ' + texto; }).join('\n');
   }
 
   function nombreDudoso(nombre) {
@@ -1558,19 +1565,42 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Convierte el documento generado a HTML simple para la vista de impresión/PDF.
   // Se lee directamente del mismo XML ya renderizado (no de una copia escrita a mano),
   // así el contenido de esta vista es exactamente el que se revisó en el Word descargado.
+  function htmlDeRun(run) {
+    var negrita = /<w:b\s*\/?>|<w:b\s+w:val="(?:true|1)"\s*\/?>/.test(run);
+    var texto = escapar(textoPlanoDeRun(run));
+    if (/<w:tab\s*\/>/.test(run)) texto += '    ';
+    if (/<w:br\s*\/>/.test(run)) texto += '<br>';
+    return negrita ? '<strong>' + texto + '</strong>' : texto;
+  }
+
+  function htmlDeParrafo(parrafo) {
+    var runs = parrafo.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+    var interior = runs.map(htmlDeRun).join('');
+    return interior.trim() ? interior : '&nbsp;';
+  }
+
+  // Una tabla real de Word (como la de la certificacion) se convierte a <table>,
+  // en vez de perder la cuadricula y dejar las celdas como parrafos sueltos.
+  function htmlDeTabla(bloqueTabla) {
+    var filas = bloqueTabla.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+    var filasHtml = filas.map(function (fila) {
+      var celdas = fila.match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+      var celdasHtml = celdas.map(function (celda) {
+        var parrafos = celda.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
+        var contenido = parrafos.map(htmlDeParrafo).join('<br>');
+        return '<td>' + (contenido || '&nbsp;') + '</td>';
+      }).join('');
+      return '<tr>' + celdasHtml + '</tr>';
+    }).join('');
+    return '<table class="tabla-doc">' + filasHtml + '</table>';
+  }
+
   function htmlDesdeDocx(zipGenerado) {
     var xml = zipGenerado.file('word/document.xml').asText();
     var cuerpo = (xml.match(/<w:body>([\s\S]*)<\/w:body>/) || [null, xml])[1];
-    var parrafos = cuerpo.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
-    return parrafos.map(function (parrafo) {
-      var runs = parrafo.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
-      var interior = runs.map(function (run) {
-        var negrita = /<w:b\s*\/?>|<w:b\s+w:val="(?:true|1)"\s*\/?>/.test(run);
-        var texto = escapar(textoPlanoDeRun(run));
-        if (/<w:tab\s*\/>/.test(run)) texto += '    ';
-        return negrita ? '<strong>' + texto + '</strong>' : texto;
-      }).join('');
-      return '<p>' + (interior.trim() ? interior : '&nbsp;') + '</p>';
+    var bloques = cuerpo.match(/<w:tbl>[\s\S]*?<\/w:tbl>|<w:p\b[\s\S]*?<\/w:p>/g) || [];
+    return bloques.map(function (bloque) {
+      return bloque.indexOf('<w:tbl>') === 0 ? htmlDeTabla(bloque) : '<p>' + htmlDeParrafo(bloque) + '</p>';
     }).join('');
   }
 
@@ -1843,10 +1873,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
      7. Interfaz
      ========================================================= */
 
-  // 'estadoGrupo' cubre indicadores que agrupan más de un estado (p. ej. "Con datos
-  // completos" junta Datos completos + Plantilla generada); 'resultado' filtra por
-  // el resultado de la diligencia. Ambos los usan los indicadores de la etapa 4.
-  var filtros = { texto: '', estado: '', estadoGrupo: '', resultado: '', materia: '', tribunal: '' };
+  // 'resultado' filtra por el resultado de la diligencia; lo usan los indicadores.
+  var filtros = { texto: '', estado: '', resultado: '', materia: '', tribunal: '' };
   var casoAbierto = null;
 
   function claseChip(estado) {
@@ -1858,8 +1886,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function casosFiltrados() {
     return almacen.casos.filter(function (caso) {
       if (filtros.estado && caso.estado !== filtros.estado) return false;
-      if (filtros.estadoGrupo === 'completos' &&
-          caso.estado !== ESTADOS.COMPLETOS && caso.estado !== ESTADOS.GENERADA) return false;
       if (filtros.resultado && caso.resultado !== filtros.resultado) return false;
       if (filtros.materia && caso.materia !== filtros.materia) return false;
       if (filtros.tribunal && caso.tribunal !== filtros.tribunal) return false;
@@ -1873,7 +1899,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function limpiarFiltros() {
-    filtros = { texto: '', estado: '', estadoGrupo: '', resultado: '', materia: '', tribunal: '' };
+    filtros = { texto: '', estado: '', resultado: '', materia: '', tribunal: '' };
     $('#buscador').value = ''; $('#filtroEstado').value = '';
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
     pintarListaCasos();
@@ -1881,7 +1907,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   // Etiqueta legible del filtro activo, para el chip sobre la lista de casos.
   function etiquetaFiltroActivo() {
-    if (filtros.estadoGrupo === 'completos') return 'Con datos completos';
     if (filtros.estado) return filtros.estado;
     if (filtros.resultado) return 'Diligencia ' + filtros.resultado.toLowerCase();
     return '';
@@ -1899,8 +1924,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   // Aplica el filtro de un indicador de la etapa 4 y salta a la lista de casos.
   function filtrarDesdeIndicador(tipo) {
-    filtros = { texto: '', estado: '', estadoGrupo: '', resultado: '', materia: '', tribunal: '' };
-    if (tipo === 'completos') filtros.estadoGrupo = 'completos';
+    filtros = { texto: '', estado: '', resultado: '', materia: '', tribunal: '' };
+    if (tipo === 'pendientes') filtros.estado = ESTADOS.COMPLETOS;
     else if (tipo === 'generados') filtros.estado = ESTADOS.GENERADA;
     else if (tipo === 'nonotificable') filtros.estado = ESTADOS.NO_NOTIFICABLE;
     else if (tipo === 'positiva') filtros.resultado = 'Positiva';
@@ -1908,8 +1933,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     // 'total' no aplica ningún filtro: muestra todos los casos.
     $('#buscador').value = ''; $('#filtroEstado').value = filtros.estado;
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
-    cambiarVista('casos');
+    // Los indicadores viven tanto en "Completar datos" como en "Control": si ya se
+    // está viendo cualquiera de las dos, el filtro se aplica ahí mismo, sin saltar
+    // de sección. Sólo se cambia de vista si se venía de Ingesta o Documentos.
+    var vistaActual = ($('.etapa.activa') || {}).getAttribute
+      ? $('.etapa.activa').getAttribute('data-vista') : '';
+    if (vistaActual !== 'casos' && vistaActual !== 'control') cambiarVista('casos');
     pintarListaCasos();
+    renderizarIndicadores('indicadores');   // por si el clic vino desde Control
+    if (vistaActual === 'control' && tipo !== 'total') {
+      mostrarMensaje('Filtro aplicado. Véalo en "Completar datos".', '');
+    }
   }
 
   function bloqueVacio(texto) {
@@ -2430,56 +2464,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   /* ---------- Etapa 3 ---------- */
 
-  function pintarDocumentos() {
-    var listos = almacen.casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !faltantesDeCaso(c).length;
-    });
-    var contenedor = $('#listaDocumentos');
-    if (!listos.length) {
-      contenedor.innerHTML = bloqueVacio('Aún no hay casos con todos los datos requeridos.');
-      return;
-    }
-    contenedor.innerHTML = '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
-      '<th>RIT</th><th>Participante</th><th>Materia</th><th>Modelo</th><th>Generados</th><th></th>' +
-      '</tr></thead><tbody>' + listos.map(function (caso) {
-        return '<tr><td class="celda-rit">' + escapar(caso.rit) + '</td>' +
-          '<td class="celda-corta">' + escapar(caso.nombre) + '</td>' +
-          '<td>' + escapar(caso.materia) + '</td>' +
-          '<td>Mensaje ' + escapar(caso.materia) + ' + Certificación</td>' +
-          '<td>' + ((caso.documentosGenerados || []).length || '—') + '</td>' +
-          '<td style="text-align:right"><button class="boton boton-secundario boton-pequeno" data-abrir="' +
-            caso.id + '" type="button">Abrir ficha</button></td></tr>';
-      }).join('') + '</tbody></table></div>';
-    $$('#listaDocumentos [data-abrir]').forEach(function (boton) {
-      boton.addEventListener('click', function () { abrirFicha(boton.getAttribute('data-abrir')); });
-    });
-  }
-
-  function pintarNoNotificables() {
-    var casos = almacen.casos.filter(function (c) { return c.estado === ESTADOS.NO_NOTIFICABLE; });
-    var contenedor = $('#listaNoNotificables');
-    if (!casos.length) {
-      contenedor.innerHTML = bloqueVacio('No hay casos para devolver a jefatura.');
-      return;
-    }
-    contenedor.innerHTML = '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
-      '<th>RIT</th><th>Participante</th><th>Motivo</th><th>Certificación</th><th></th>' +
-      '</tr></thead><tbody>' + casos.map(function (caso) {
-        var telefonoCaso = analizarTelefono(caso.telefono);
-        var motivo = !String(caso.nombre || '').trim() ? 'Sin nombre'
-          : telefonoCaso.vacio ? 'Sin teléfono' : 'Teléfono no válido para WhatsApp';
-        return '<tr><td class="celda-rit">' + escapar(caso.rit) + '</td>' +
-          '<td class="celda-corta">' + escapar(caso.nombre || '—') + '</td>' +
-          '<td>' + escapar(motivo) + '</td>' +
-          '<td>' + ((caso.documentosGenerados || []).length || '—') + '</td>' +
-          '<td style="text-align:right"><button class="boton boton-secundario boton-pequeno" data-abrir="' +
-            caso.id + '" type="button">Abrir ficha</button></td></tr>';
-      }).join('') + '</tbody></table></div>';
-    $$('#listaNoNotificables [data-abrir]').forEach(function (boton) {
-      boton.addEventListener('click', function () { abrirFicha(boton.getAttribute('data-abrir')); });
-    });
-  }
-
   // Trazabilidad: todo lo generado hasta ahora, con acceso directo al PDF de cada
   // documento. Se regenera al vuelo desde los datos vigentes del caso — si el caso
   // se corrigió después de generar, el PDF refleja la versión actual, no la original.
@@ -2525,7 +2509,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Qué botón de indicador corresponde al filtro actualmente aplicado, para
   // resaltarlo y que se note cuál está activo al cambiar de uno a otro.
   function filtroIndicadorActivo() {
-    if (filtros.estadoGrupo === 'completos') return 'completos';
+    if (filtros.estado === ESTADOS.COMPLETOS) return 'pendientes';
     if (filtros.estado === ESTADOS.GENERADA) return 'generados';
     if (filtros.estado === ESTADOS.NO_NOTIFICABLE) return 'nonotificable';
     if (filtros.resultado === 'Positiva') return 'positiva';
@@ -2542,8 +2526,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var negativas = almacen.casos.filter(function (c) { return c.resultado === 'Negativa'; }).length;
     return [
       { valor: total, etiqueta: 'Casos recibidos', clase: '', filtro: 'total' },
-      { valor: cuenta[ESTADOS.COMPLETOS] + cuenta[ESTADOS.GENERADA], etiqueta: 'Con datos completos',
-        clase: 'acento', filtro: 'completos' },
+      { valor: cuenta[ESTADOS.COMPLETOS], etiqueta: 'Pendientes', clase: 'acento', filtro: 'pendientes' },
       { valor: cuenta[ESTADOS.GENERADA], etiqueta: 'Con documento generado', clase: 'verde', filtro: 'generados' },
       { valor: cuenta[ESTADOS.NO_NOTIFICABLE], etiqueta: 'Para devolver a jefatura', clase: 'rojo',
         filtro: 'nonotificable' },
@@ -2678,15 +2661,15 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var pendientes = almacen.casos.filter(function (c) {
       return c.estado === ESTADOS.RECIBIDO;
     }).length;
-    var listos = almacen.casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !faltantesDeCaso(c).length;
-    }).length;
+    // El número junto a "Documentos" refleja lo ya generado, que es lo que esa
+    // pestaña muestra ahora (trazabilidad, no una cola de trabajo pendiente).
+    var generados = almacen.casos.reduce(function (n, c) {
+      return n + (c.documentosGenerados || []).length;
+    }, 0);
     $('#cuentaCasos').textContent = pendientes;
-    $('#cuentaListos').textContent = listos;
+    $('#cuentaListos').textContent = generados;
     pintarFiltroTribunal();
     pintarListaCasos();
-    pintarDocumentos();
-    pintarNoNotificables();
     pintarHistorialDocumentos();
     pintarControl();
     pintarHistorial();
@@ -2771,7 +2754,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div style="display:flex;gap:var(--e2);flex-wrap:wrap;margin-top:var(--e3)">' +
       '<button class="boton boton-secundario" type="button" id="btnRespaldar">Descargar respaldo</button>' +
       '<button class="boton boton-secundario" type="button" id="btnRestaurar">Restaurar respaldo…</button>' +
-      '<button class="boton boton-peligro" type="button" id="btnBorrarTodo">Borrar todos los datos</button>' +
       '<input type="file" id="archivoRespaldo" accept=".json" hidden></div></div>';
     $('#fichaPie').innerHTML = '<button class="boton" type="button" id="btnGuardarConfiguracion">Guardar</button>';
 
@@ -2818,14 +2800,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#archivoRespaldo').addEventListener('change', function (evento) {
       if (evento.target.files[0]) { restaurar(evento.target.files[0]); cerrarFicha(); }
     });
-    $('#btnBorrarTodo').addEventListener('click', function () {
-      if (!confirm('Se borrarán todos los casos guardados en este equipo. ' +
-                   '¿Descargó un respaldo? Esta acción no se puede deshacer.')) return;
-      almacen.casos = []; almacen.cargas = [];
-      guardarAlmacen(); refrescar(); cerrarFicha();
-      mostrarMensaje('Datos borrados de este equipo.', '');
-    });
-
     $('#velo').classList.add('visible');
     $('#panelFicha').classList.add('visible');
     $('#panelFicha').setAttribute('aria-hidden', 'false');
@@ -2884,7 +2858,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     $('#buscador').addEventListener('input', function (e) { filtros.texto = e.target.value; pintarListaCasos(); });
     $('#filtroEstado').addEventListener('change', function (e) {
-      filtros.estado = e.target.value; filtros.estadoGrupo = ''; filtros.resultado = '';
+      filtros.estado = e.target.value; filtros.resultado = '';
       pintarListaCasos();
     });
     $('#filtroMateria').addEventListener('change', function (e) { filtros.materia = e.target.value; pintarListaCasos(); });
