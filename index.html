@@ -524,19 +524,56 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 .hoja-impresion table.tabla-doc td {
   border: 1px solid #999; padding: 5pt 8pt; vertical-align: top;
 }
-.impresion-dashboard {
-  font-family: 'Sora', Arial, sans-serif; color: var(--azul-profundo);
+.informe-ejecutivo { font-family: 'Sora', Arial, sans-serif; color: var(--azul-profundo); }
+.informe-header {
+  border-bottom: 2px solid var(--acento); padding-bottom: 10pt; margin-bottom: 16pt;
 }
-.impresion-dashboard h1 { font-size: 18pt; margin: 0 0 4pt; }
-.impresion-dashboard-meta { font-size: 10pt; color: #667085; margin: 0 0 16pt; }
-.impresion-dashboard-kpis {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10pt; margin: 0 0 18pt;
+.informe-header h1 { font-size: 19pt; margin: 0 0 3pt; }
+.informe-header-meta { font-size: 9.5pt; color: #667085; }
+.informe-header-meta span + span::before { content: '·'; margin: 0 6pt; }
+
+.informe-kpis {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 9pt; margin: 0 0 18pt;
 }
-.impresion-dashboard-kpis .kpi { break-inside: avoid; }
-.impresion-dashboard-grafico { break-inside: avoid; margin: 0 0 18pt; }
-.impresion-dashboard-grafico h3 { font-size: 12pt; margin: 0 0 4pt; }
-.impresion-dashboard-grafico img { width: 100%; max-height: 220pt; object-fit: contain; display: block; }
-.impresion-dashboard-grafico p { font-size: 9.5pt; color: #667085; margin: 4pt 0 0; }
+.informe-kpis .kpi { break-inside: avoid; }
+
+.informe-seccion {
+  break-inside: avoid; margin: 0 0 16pt; padding: 12pt 14pt;
+  border: 1px solid #E3E7ED; border-left: 3px solid var(--azul-medio); border-radius: 8px;
+  background: #FBFCFE;
+}
+.informe-seccion-titulo {
+  font-size: 11.5pt; font-weight: 700; color: var(--azul-profundo); margin: 0 0 8pt;
+}
+.informe-seccion-lectura { font-size: 9.5pt; color: #667085; margin: 8pt 0 0; }
+.informe-seccion-vacio { font-size: 9.5pt; color: #8B94A6; font-style: italic; }
+
+.informe-barra {
+  display: flex; height: 20pt; border-radius: 5pt; overflow: hidden; background: #EEF1F5;
+  margin-bottom: 8pt;
+}
+.informe-barra-seg { height: 100%; }
+.informe-leyenda { display: flex; flex-wrap: wrap; gap: 4pt 14pt; }
+.informe-leyenda-item { display: flex; align-items: center; gap: 5pt; font-size: 9pt; color: #3A4256; }
+.informe-leyenda-punto { width: 8pt; height: 8pt; border-radius: 2pt; flex: 0 0 auto; }
+
+.informe-tabla { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.informe-tabla th, .informe-tabla td {
+  text-align: left; padding: 5pt 7pt; border-bottom: 1px solid #E9ECF2;
+}
+.informe-tabla th {
+  font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; color: #8B94A6; font-weight: 600;
+}
+.informe-tabla td.num, .informe-tabla th.num { text-align: right; }
+.informe-tabla tbody tr:last-child td { border-bottom: none; }
+
+.informe-ranking-fila {
+  display: grid; grid-template-columns: 34% 1fr 24pt; align-items: center; gap: 8pt; margin-bottom: 6pt;
+}
+.informe-ranking-etiqueta { font-size: 9pt; color: #3A4256; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.informe-ranking-barra { height: 10pt; background: #EEF1F5; border-radius: 4pt; overflow: hidden; }
+.informe-ranking-barra div { height: 100%; background: var(--azul-medio); border-radius: 4pt; }
+.informe-ranking-valor { font-size: 9pt; font-weight: 600; text-align: right; }
 .aviso-fidelidad {
   max-width: 210mm; width: 94vw; margin: var(--e3) 0 0; padding: 10px 16px;
   background: rgba(255,255,255,.92); border-radius: 8px; font-size: 12.5px; color: #4A4F57;
@@ -1812,9 +1849,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     }).join('');
   }
 
-  function abrirImpresion(titulo, html) {
+  // ocultarAviso: el aviso fijo bajo la hoja habla de "el mismo texto que se usó
+  // para el Word" — sólo aplica a la vista de impresión de documentos generados,
+  // no al informe ejecutivo del dashboard (que no viene de ningún .docx).
+  function abrirImpresion(titulo, html, ocultarAviso) {
     $('#tituloImpresion').textContent = titulo;
     $('#hojaImpresion').innerHTML = html;
+    $('.aviso-fidelidad').style.display = ocultarAviso ? 'none' : '';
     $('#vistaImpresion').classList.add('visible');
     $('#vistaImpresion').setAttribute('aria-hidden', 'false');
   }
@@ -3204,6 +3245,51 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div class="kpi-lectura">' + escapar(lectura) + '</div></div>';
   }
 
+  // Compartida entre el tablero en pantalla y el informe ejecutivo en PDF, para
+  // que las mismas 5 tarjetas nunca queden desincronizadas entre ambas vistas.
+  function construirKpisHtml(m) {
+    return tarjetaKpi(m.total, 'Causas recibidas', 'Total de causas ingresadas al centro.', '') +
+      tarjetaKpi(m.avance + '%', 'Avance de gestión',
+        m.finalizadas + ' de ' + m.total + ' causas ya finalizadas, con resultado registrado.',
+        m.avance >= 70 ? 'verde' : m.avance >= 40 ? 'ambar' : 'rojo') +
+      tarjetaKpi(m.tasaExito + '%', 'Notificación positiva',
+        'Sobre ' + m.gestionadas + ' gestión(es) realizada(s); no incluye pendientes.',
+        m.gestionadas === 0 ? '' : m.tasaExito >= 60 ? 'verde' : m.tasaExito >= 40 ? 'ambar' : 'rojo') +
+      tarjetaKpi(m.pendientes, 'Pendientes por diligenciar',
+        'Sin resultado y con datos válidos: se pueden trabajar ya mismo.', 'acento') +
+      tarjetaKpi(m.noNotificables, 'Diligencias con falta de información',
+        'Sin resultado, pero con teléfono o nombre inválido — falta corregir el dato.', m.noNotificables > 0 ? 'rojo' : '');
+  }
+
+  // Barra horizontal apilada de una sola fila + leyenda, hecha en HTML/CSS puro
+  // (sin canvas): se usa en el informe ejecutivo en PDF porque capturar los
+  // gráficos de Chart.js con toDataURL() resultó poco confiable con datos
+  // reales (canvas en blanco si el redibujado no terminaba a tiempo, o
+  // ilegible con muchas categorías) — HTML/CSS siempre se ve igual en pantalla
+  // y al imprimir.
+  function barraSegmentos(segmentos, total) {
+    if (!total) return '<div class="informe-seccion-vacio">Sin datos para graficar.</div>';
+    var barra = '<div class="informe-barra">' + segmentos.filter(function (s) { return s.valor > 0; })
+      .map(function (s) {
+        var pct = Math.round(s.valor / total * 1000) / 10;
+        return '<div class="informe-barra-seg" style="width:' + pct + '%;background:' + s.color + '"></div>';
+      }).join('') + '</div>';
+    var leyenda = '<div class="informe-leyenda">' + segmentos.map(function (s) {
+      var pct = total ? Math.round(s.valor / total * 100) : 0;
+      return '<div class="informe-leyenda-item"><span class="informe-leyenda-punto" style="background:' +
+        s.color + '"></span>' + escapar(s.etiqueta) + ': ' + s.valor + ' (' + pct + '%)</div>';
+    }).join('') + '</div>';
+    return barra + leyenda;
+  }
+
+  function filaRanking(etiqueta, valor, maximo, color) {
+    var pct = maximo ? Math.round(valor / maximo * 100) : 0;
+    return '<div class="informe-ranking-fila">' +
+      '<div class="informe-ranking-etiqueta" title="' + escapar(etiqueta) + '">' + escapar(etiqueta) + '</div>' +
+      '<div class="informe-ranking-barra"><div style="width:' + pct + '%;background:' + color + '"></div></div>' +
+      '<div class="informe-ranking-valor">' + valor + '</div></div>';
+  }
+
   // Opciones comunes de los gráficos de barra, para que todos compartan la
   // misma tipografía, grilla tenue y tooltips activos (nada del look por
   // defecto de Chart.js sin personalizar).
@@ -3294,18 +3380,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     $('#tableroFechaCorte').textContent = 'Datos al ' + fechaCorta(new Date()) + ' · actualización automática';
 
-    $('#tableroKpis').innerHTML =
-      tarjetaKpi(m.total, 'Causas recibidas', 'Total de causas ingresadas al centro.', '') +
-      tarjetaKpi(m.avance + '%', 'Avance de gestión',
-        m.finalizadas + ' de ' + m.total + ' causas ya finalizadas, con resultado registrado.',
-        m.avance >= 70 ? 'verde' : m.avance >= 40 ? 'ambar' : 'rojo') +
-      tarjetaKpi(m.tasaExito + '%', 'Notificación positiva',
-        'Sobre ' + m.gestionadas + ' gestión(es) realizada(s); no incluye pendientes.',
-        m.gestionadas === 0 ? '' : m.tasaExito >= 60 ? 'verde' : m.tasaExito >= 40 ? 'ambar' : 'rojo') +
-      tarjetaKpi(m.pendientes, 'Pendientes por diligenciar',
-        'Sin resultado y con datos válidos: se pueden trabajar ya mismo.', 'acento') +
-      tarjetaKpi(m.noNotificables, 'Diligencias con falta de información',
-        'Sin resultado, pero con teléfono o nombre inválido — falta corregir el dato.', m.noNotificables > 0 ? 'rojo' : '');
+    $('#tableroKpis').innerHTML = construirKpisHtml(m);
 
     // Tendencia: gestiones completadas por día, apiladas por resultado.
     var dias = m.diasOrdenados;
@@ -3382,34 +3457,89 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       : 'Todavía no hay causas cargadas.';
   }
 
-  // Arma una versión imprimible del dashboard (KPIs + gráficos convertidos a
-  // imagen) y la pasa por la misma vista de impresión que ya usan los
-  // documentos generados: mismo botón "Guardar como PDF" (impresión del
-  // navegador), sin agregar ninguna librería nueva de exportación a PDF.
+  // Arma el informe ejecutivo imprimible: mismos datos que el dashboard, pero
+  // como HTML/CSS puro (barras y tablas) en vez de imágenes de los gráficos de
+  // Chart.js — ver el porqué en barraSegmentos() más arriba. No depende de que
+  // la pestaña del dashboard se haya visitado antes: recalcula todo de nuevo.
   function exportarDashboardPdf() {
-    if (typeof Chart === 'undefined') return;
-    cambiarVista('dashboard');
-    pintarDashboard();
-    // Los gráficos se dibujan con animación (opcionesBarras) vía requestAnimationFrame;
-    // toDataURL() llamado justo después de crearlos capturaría un canvas todavía en
-    // blanco. update('none') fuerza el redibujado completo de inmediato, sin animar.
-    Object.keys(graficosTablero).forEach(function (clave) { graficosTablero[clave].update('none'); });
-    var html = '<div class="impresion-dashboard">' +
-      '<h1>Informe ejecutivo · Notificaciones CINJ</h1>' +
-      '<p class="impresion-dashboard-meta">' + escapar($('#tableroFechaCorte').textContent) + '</p>' +
-      '<div class="impresion-dashboard-kpis">' + $('#tableroKpis').innerHTML + '</div>';
-    $$('#vista-dashboard .tarjeta-grafico').forEach(function (tarjeta) {
-      var titulo = tarjeta.querySelector('.tarjeta-titulo');
-      var lectura = tarjeta.querySelector('.campo-ayuda');
-      var lienzo = tarjeta.querySelector('canvas');
-      if (!lienzo) return;
-      html += '<div class="impresion-dashboard-grafico">' +
-        '<h3>' + escapar(titulo ? titulo.textContent : '') + '</h3>' +
-        '<img src="' + lienzo.toDataURL('image/png', 1) + '" alt="">' +
-        (lectura ? '<p>' + escapar(lectura.textContent) + '</p>' : '') + '</div>';
-    });
+    var m = metricasDashboard();
+    var periodo = ($('#selectorPeriodoCargas') || {}).value || 'semana';
+    var dCargas = metricasPorCarga(periodo);
+    var unidadCargas = periodo === 'dia' ? 'Día' : periodo === 'mes' ? 'Mes' : 'Semana del';
+
+    var html = '<div class="informe-ejecutivo">' +
+      '<div class="informe-header"><h1>Informe ejecutivo · Notificaciones CINJ</h1>' +
+      '<div class="informe-header-meta"><span>Centro Integrado de Notificaciones Judiciales · La Serena – Coquimbo</span>' +
+      '<span>Datos al ' + fechaCorta(new Date()) + '</span></div></div>' +
+      '<div class="informe-kpis">' + construirKpisHtml(m) + '</div>';
+
+    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Composición de resultados</div>' +
+      barraSegmentos([
+        { valor: m.porResultado.Positiva, color: COLOR_POSITIVA, etiqueta: 'Positiva' },
+        { valor: m.porResultado.Negativa, color: COLOR_NEGATIVA, etiqueta: 'Negativa' },
+        { valor: m.porResultado['No realizada'], color: COLOR_NOREALIZADA, etiqueta: 'Con observaciones' },
+        { valor: m.porResultado.Pendiente, color: COLOR_PENDIENTE, etiqueta: 'Por diligenciar' },
+        { valor: m.noNotificables, color: COLOR_ROJO, etiqueta: 'Falta de información' }
+      ], m.total) +
+      '<p class="informe-seccion-lectura">' + m.porResultado.Positiva + ' positivas, ' + m.porResultado.Negativa +
+      ' negativas, ' + m.porResultado['No realizada'] + ' con observaciones, ' + m.porResultado.Pendiente +
+      ' por diligenciar y ' + m.noNotificables + ' con falta de información — suman ' + m.total + '.</p></div>';
+
+    var dias = m.diasOrdenados;
+    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Tendencia de gestiones (por día)</div>' +
+      (dias.length
+        ? '<table class="informe-tabla"><thead><tr><th>Fecha</th><th class="num">Positiva</th>' +
+          '<th class="num">Negativa</th><th class="num">Con observaciones</th><th class="num">Total</th></tr></thead><tbody>' +
+          dias.map(function (d) {
+            var f = m.porDia[d];
+            var t = f.Positiva + f.Negativa + f['No realizada'];
+            return '<tr><td>' + fechaCorta(d) + '</td><td class="num">' + f.Positiva + '</td><td class="num">' +
+              f.Negativa + '</td><td class="num">' + f['No realizada'] + '</td><td class="num">' + t + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<div class="informe-seccion-vacio">Todavía no hay gestiones completadas.</div>') +
+      '<p class="informe-seccion-lectura">' + (dias.length
+        ? 'Se registran ' + m.gestionadas + ' gestión(es) completada(s) entre el ' + fechaCorta(dias[0]) +
+          ' y el ' + fechaCorta(dias[dias.length - 1]) + '.'
+        : 'Todavía no hay gestiones completadas para graficar.') + '</p></div>';
+
+    var totalCargado = dCargas.claves.reduce(function (acc, k) {
+      var b = dCargas.buckets[k];
+      return acc + b.Positiva + b.Negativa + b['No realizada'] + b.Pendiente + b.FaltaInformacion;
+    }, 0);
+    var unidadLectura = periodo === 'dia' ? 'día(s)' : periodo === 'mes' ? 'mes(es)' : 'semana(s)';
+    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Causas por fecha de carga</div>' +
+      (dCargas.claves.length
+        ? '<table class="informe-tabla"><thead><tr><th>' + unidadCargas + '</th><th class="num">Positiva</th>' +
+          '<th class="num">Negativa</th><th class="num">Con obs.</th><th class="num">Pendiente</th>' +
+          '<th class="num">Falta inf.</th><th class="num">Total</th></tr></thead><tbody>' +
+          dCargas.claves.map(function (k) {
+            var b = dCargas.buckets[k];
+            var t = b.Positiva + b.Negativa + b['No realizada'] + b.Pendiente + b.FaltaInformacion;
+            return '<tr><td>' + escapar(etiquetaBucketCarga(k, periodo)) + '</td><td class="num">' + b.Positiva +
+              '</td><td class="num">' + b.Negativa + '</td><td class="num">' + b['No realizada'] +
+              '</td><td class="num">' + b.Pendiente + '</td><td class="num">' + b.FaltaInformacion +
+              '</td><td class="num">' + t + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<div class="informe-seccion-vacio">Todavía no hay causas cargadas.</div>') +
+      '<p class="informe-seccion-lectura">' + (dCargas.claves.length
+        ? totalCargado + ' causa(s) cargada(s) en ' + dCargas.claves.length + ' ' + unidadLectura + '; incluye lo pendiente.'
+        : 'Todavía no hay causas cargadas.') + '</p></div>';
+
+    var maxTribunal = m.tribunalesOrdenados.length ? m.porTribunal[m.tribunalesOrdenados[0]] : 0;
+    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Causas por tribunal</div>' +
+      (m.tribunalesOrdenados.length
+        ? m.tribunalesOrdenados.map(function (t) { return filaRanking(t, m.porTribunal[t], maxTribunal, COLOR_AZUL); }).join('')
+        : '<div class="informe-seccion-vacio">Todavía no hay causas cargadas.</div>') + '</div>';
+
+    var paletaMaterias = [COLOR_PENDIENTE, COLOR_AZUL, COLOR_NOREALIZADA, COLOR_NEGATIVA, COLOR_POSITIVA];
+    var materias = Object.keys(m.porMateria);
+    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Materia</div>' +
+      barraSegmentos(materias.map(function (mt, i) {
+        return { valor: m.porMateria[mt], color: paletaMaterias[i % paletaMaterias.length], etiqueta: mt };
+      }), m.total) + '</div>';
+
     html += '</div>';
-    abrirImpresion('Informe ejecutivo · Notificaciones CINJ · ' + fechaCorta(new Date()), html);
+    abrirImpresion('Informe ejecutivo · Notificaciones CINJ · ' + fechaCorta(new Date()), html, true);
   }
 
   /* ---------- Navegación y refresco ---------- */
