@@ -892,15 +892,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     NO_NOTIFICABLE: 'No notificable'
   };
 
-  // Campos que el funcionario debe digitar para poder generar la notificación.
-  // El RUN no es obligatorio: muchas resoluciones no lo traen y no debe frenar el envío;
-  // si se ingresa, igual se valida su dígito verificador.
-  var CAMPOS_REQUERIDOS = [
-    { clave: 'fechaAudiencia', etiqueta: 'Fecha de audiencia' },
-    { clave: 'horaAudiencia', etiqueta: 'Hora de audiencia' },
-    { clave: 'tipoAudiencia', etiqueta: 'Tipo de audiencia' },
-    { clave: 'citeseNotifiquese', etiqueta: 'Cítese / Notifíquese' }
-  ];
+  // A pedido explícito de JC (22-08-2026): nada es obligatorio para generar un
+  // documento. El funcionario escribe lo que tiene disponible y genera con eso;
+  // los campos vacíos quedan en blanco en el Word, no bloquean la generación.
+  var CAMPOS_REQUERIDOS = [];
 
   // Cada documento exige sólo lo que realmente imprime: la certificación no
   // menciona la hora ni el tipo de audiencia, así que no tiene por qué pedirlos.
@@ -1305,6 +1300,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // resultado ya registrado, sólo levante el candado de edición.
   function estaFinalizada(caso) {
     return !!caso.bloqueado;
+  }
+
+  // Cuando la planilla compartida sincroniza mientras una ficha está abierta,
+  // almacen.casos se reemplaza por objetos nuevos y "casoAbierto" queda apuntando
+  // a uno huérfano fuera del arreglo: cualquier cambio hecho sobre esa referencia
+  // se pierde en silencio al guardar. Toda función que vaya a modificar
+  // casoAbierto debe llamar esto primero para recuperar la referencia viva.
+  function refrescarCasoAbierto() {
+    if (!casoAbierto) return null;
+    var vivo = almacen.casos.find(function (c) { return c.id === casoAbierto.id; });
+    if (vivo) casoAbierto = vivo;
+    return casoAbierto;
   }
 
   // Fusiona los casos de todos los orígenes: ante el mismo RIT + correlativo
@@ -1787,6 +1794,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return 'Certificación';
   }
 
+  // Mismo texto que ya arma la columna "Combinación" de la planilla de control:
+  // RIT + nombre + iniciales del notificador. Sirve para que el funcionario lo
+  // copie tal cual como nombre de contacto al guardar el número en su celular.
+  function nombreContacto(caso) {
+    var iniciales = almacen.configuracion.iniciales || '';
+    return caso.rit + ' ' + caso.nombre + (iniciales ? ' - ' + iniciales : '');
+  }
+
   /* =========================================================
      6. Planilla 2 · control
      ========================================================= */
@@ -1801,7 +1816,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       caso.correlativo,
       fechaCorta(caso.fechaIngreso),
       estadoNotificacion,
-      caso.rit + ' ' + caso.nombre + (iniciales ? ' - ' + iniciales : ''),
+      nombreContacto(caso),
       caso.rit,
       fechaCorta(caso.fechaAudiencia),
       caso.horaAudiencia,
@@ -1997,7 +2012,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   // 'resultado' filtra por el resultado de la diligencia; 'sinResultado' es el indicador
   // "Pendientes": notificable y todavía sin Positiva ni Negativa registrada.
-  var filtros = { texto: '', estado: '', resultado: '', sinResultado: false, materia: '', tribunal: '' };
+  var filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
   var casoAbierto = null;
 
   function claseChip(estado) {
@@ -2011,6 +2026,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       if (filtros.estado && caso.estado !== filtros.estado) return false;
       if (filtros.resultado && caso.resultado !== filtros.resultado) return false;
       if (filtros.sinResultado && (caso.resultado || caso.estado === ESTADOS.NO_NOTIFICABLE)) return false;
+      // "Diligencias con falta de información": sin resultado Y con teléfono/nombre inválido.
+      // Apenas se certifica (queda con un resultado), sale de esta lista y pasa a contarse
+      // sólo en su resultado — así nunca se cuenta una causa dos veces.
+      if (filtros.faltaInformacion && (caso.estado !== ESTADOS.NO_NOTIFICABLE || caso.resultado)) return false;
       if (filtros.materia && caso.materia !== filtros.materia) return false;
       if (filtros.tribunal && caso.tribunal !== filtros.tribunal) return false;
       if (filtros.texto) {
@@ -2023,18 +2042,28 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function limpiarFiltros() {
-    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, materia: '', tribunal: '' };
+    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
     $('#buscador').value = ''; $('#filtroEstado').value = '';
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
     pintarListaCasos();
     if ($('#tablaControl')) pintarControl();
   }
 
+  // Texto que ve el funcionario para el resultado "No realizada": se certificó la
+  // gestión, pero con observaciones (falta de documentos u otro impedimento). El
+  // valor guardado internamente sigue siendo 'No realizada' — no se migra el dato
+  // ya existente en la planilla compartida, sólo cambia cómo se muestra.
+  function etiquetaResultado(valor) {
+    if (valor === 'No realizada') return 'Realizada con certificación con observaciones';
+    return valor || 'Sin registrar';
+  }
+
   // Etiqueta legible del filtro activo, para el chip sobre la lista de casos.
   function etiquetaFiltroActivo() {
     if (filtros.sinResultado) return 'Pendientes de diligencia';
+    if (filtros.faltaInformacion) return 'Diligencias con falta de información';
     if (filtros.estado) return filtros.estado;
-    if (filtros.resultado) return 'Diligencia ' + filtros.resultado.toLowerCase();
+    if (filtros.resultado) return 'Diligencia: ' + etiquetaResultado(filtros.resultado);
     return '';
   }
 
@@ -2053,10 +2082,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Aplica el filtro de un indicador (vive tanto en "Completar datos" como en "Control")
   // y actualiza ambas vistas en el sitio, sin forzar un cambio de sección.
   function filtrarDesdeIndicador(tipo) {
-    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, materia: '', tribunal: '' };
+    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
     if (tipo === 'pendientes') filtros.sinResultado = true;
-    else if (tipo === 'generados') filtros.estado = ESTADOS.GENERADA;
-    else if (tipo === 'nonotificable') filtros.estado = ESTADOS.NO_NOTIFICABLE;
+    else if (tipo === 'nonotificable') filtros.faltaInformacion = true;
     else if (tipo === 'positiva') filtros.resultado = 'Positiva';
     else if (tipo === 'negativa') filtros.resultado = 'Negativa';
     else if (tipo === 'norealizada') filtros.resultado = 'No realizada';
@@ -2158,6 +2186,29 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Tipo de audiencia: lista cerrada por materia + "Otro (especificar)" que revela un
   // campo de texto libre. El valor real (el de la lista o el escrito a mano) se guarda
   // en el input oculto f-tipoAudiencia, que es el que lee guardarFicha().
+  var TIPOS_PARTICIPANTE = ['Demandado', 'Demandante', 'Denunciado', 'Denunciante', 'Imputado',
+    'Víctima', 'Testigo', 'Requerido', 'Requirente'];
+
+  // Mismo patrón que campoTipoAudiencia: lista cerrada + "Otro" con texto libre,
+  // para no perder la calidad real ("Denunciado (a)", "Abuela materna / requerida",
+  // etc.) que sí trae la Planilla 1 pero que no está en la lista corta.
+  function campoTipoParticipante(valor) {
+    var enLista = valor && TIPOS_PARTICIPANTE.indexOf(valor) >= 0;
+    var esOtro = !!(valor && !enLista);
+    var opciones = '<option value="">Seleccione…</option>' +
+      TIPOS_PARTICIPANTE.map(function (t) {
+        return '<option value="' + escapar(t) + '"' + (valor === t ? ' selected' : '') + '>' + escapar(t) + '</option>';
+      }).join('') +
+      '<option value="__otro__"' + (esOtro ? ' selected' : '') + '>Otro (especificar)</option>';
+    return '<div class="campo"><label for="f-tipoParticipante-select">A quién se notifica</label>' +
+      '<select id="f-tipoParticipante-select">' + opciones + '</select>' +
+      '<input id="f-tipoParticipante-otro" type="text" placeholder="Escriba la calidad del participante" ' +
+        'style="margin-top:var(--e2)' + (esOtro ? '' : ';display:none') + '" value="' +
+        escapar(esOtro ? valor : '') + '">' +
+      '<input type="hidden" id="f-tipoParticipante" value="' + escapar(valor || '') + '">' +
+      '</div>';
+  }
+
   function campoTipoAudiencia(valor, materia) {
     var lista = TIPOS_AUDIENCIA[materia] || [];
     var enLista = valor && lista.indexOf(valor) >= 0;
@@ -2167,7 +2218,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         return '<option value="' + escapar(t) + '"' + (valor === t ? ' selected' : '') + '>' + escapar(t) + '</option>';
       }).join('') +
       '<option value="__otro__"' + (esOtro ? ' selected' : '') + '>Otro (especificar)</option>';
-    return '<div class="campo"><label for="f-tipoAudiencia-select">Tipo de audiencia <span class="requerido">*</span></label>' +
+    return '<div class="campo"><label for="f-tipoAudiencia-select">Tipo de audiencia</label>' +
       '<select id="f-tipoAudiencia-select">' + opciones + '</select>' +
       '<input id="f-tipoAudiencia-otro" type="text" placeholder="Escriba el tipo de audiencia" ' +
         'style="margin-top:var(--e2)' + (esOtro ? '' : ';display:none') + '" value="' +
@@ -2219,9 +2270,32 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function bloqueGenerar(caso) {
     if (esAjeno(caso) || estaFinalizada(caso)) return '';
 
+    var panelGenerarNormal =
+      '<div class="panel-generar">' +
+      '<div class="panel-generar-titulo">' + iconoGenerar() + ' Generar documentos</div>' +
+      '<div class="panel-generar-estado" id="avisoFaltantes">Genere lo que tenga disponible; los ' +
+      'campos que falten quedan en blanco en el documento, no bloquean la generación.</div>' +
+      '<div class="panel-generar-botones">' +
+      '<div class="grupo-generar">' +
+      '<button class="boton boton-acento" type="button" id="btnGenerarMensaje">Generar notificación (Word)</button>' +
+      '</div>' +
+      '<div class="grupo-generar">' +
+      '<button class="boton boton-secundario" type="button" id="btnGenerarCertificacion">Generar certificación (Word)</button>' +
+      '<button class="boton boton-secundario boton-pequeno" type="button" id="btnPdfCertificacion" ' +
+      'title="Ver y guardar como PDF">PDF</button></div>' +
+      '<button class="boton boton-secundario" type="button" id="btnCopiarTexto">Copiar texto</button>' +
+      '</div></div>';
+
     if (caso.estado === ESTADOS.NO_NOTIFICABLE) {
       var motivo = caso.motivoNoNotificable || motivoSugerido(caso);
-      return '<div class="panel-generar">' +
+      var telefono = analizarTelefono(caso.telefono);
+      // Un teléfono fijo o extranjero bloquea WhatsApp, pero igual puede haberse
+      // logrado contactar a la persona por una llamada telefónica normal — en ese
+      // caso no corresponde devolver el caso a jefatura, sino registrar el
+      // resultado como cualquier otro (Positiva/Negativa más abajo, en "Diligencia
+      // y certificación") y generar la notificación/certificación normal.
+      var esPorTelefono = telefono.bloqueaWhatsapp;
+      var html = '<div class="panel-generar">' +
         '<div class="panel-generar-titulo">' + iconoGenerar() + ' Certificar como no notificable</div>' +
         '<div class="panel-generar-estado">Este caso se devuelve a jefatura. Puede generar la ' +
         'certificación que explica el motivo, editando el texto si lo necesita.</div>' +
@@ -2232,25 +2306,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         'Generar certificación (Word)</button>' +
         '<button class="boton boton-secundario boton-pequeno" type="button" id="btnPdfFaltaAntecedentes" ' +
         'title="Ver y guardar como PDF">PDF</button></div></div></div>';
+      if (esPorTelefono) {
+        html += '<div class="aviso aviso-info" style="margin-top:var(--e3)">' +
+          '<div><strong>¿Igual logró contactarlo por teléfono</strong>, aunque el número no sirve para ' +
+          'WhatsApp? No hace falta devolver el caso a jefatura: registre el resultado más abajo, en ' +
+          '"Diligencia y certificación", y genere la notificación o certificación normal aquí.</div></div>' +
+          panelGenerarNormal;
+      }
+      return html;
     }
 
-    var faltanMensaje = faltantesParaDocumento(caso, 'mensaje');
-    return '<div class="panel-generar">' +
-      '<div class="panel-generar-titulo">' + iconoGenerar() + ' Generar documentos</div>' +
-      '<div class="panel-generar-estado" id="avisoFaltantes">' +
-      (faltanMensaje.length ? 'Para la notificación faltan: ' + faltanMensaje.join(', ') + '.'
-                             : 'Datos completos para generar la notificación.') + '</div>' +
-      '<div class="panel-generar-botones">' +
-      '<div class="grupo-generar">' +
-      '<button class="boton boton-acento" type="button" id="btnGenerarMensaje">Generar notificación (Word)</button>' +
-      '<button class="boton boton-secundario boton-pequeno" type="button" id="btnPdfMensaje" ' +
-      'title="Ver y guardar como PDF">PDF</button></div>' +
-      '<div class="grupo-generar">' +
-      '<button class="boton boton-secundario" type="button" id="btnGenerarCertificacion">Generar certificación (Word)</button>' +
-      '<button class="boton boton-secundario boton-pequeno" type="button" id="btnPdfCertificacion" ' +
-      'title="Ver y guardar como PDF">PDF</button></div>' +
-      '<button class="boton boton-secundario" type="button" id="btnCopiarTexto">Copiar texto</button>' +
-      '</div></div>';
+    return panelGenerarNormal;
   }
 
   function abrirFicha(id) {
@@ -2271,7 +2337,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         '. Puede consultarlo y generar sus documentos, pero no modificar la ficha.' });
     }
     if (!esAjeno(caso) && estaFinalizada(caso)) {
-      avisos.push({ tipo: 'info', texto: 'Causa finalizada (resultado: ' + caso.resultado +
+      avisos.push({ tipo: 'info', texto: 'Causa finalizada (resultado: ' + etiquetaResultado(caso.resultado) +
         '). Queda en modo solo lectura; use "Reabrir" para volver a editarla.' });
     }
     if (caso.estado === ESTADOS.NO_NOTIFICABLE) {
@@ -2312,18 +2378,23 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       }).join('') + '</div></div>';
 
     html += '<div class="seccion-ficha"><h4>Datos a completar</h4>' +
-      campoTexto('nombre', 'Nombre del participante', caso.nombre, { requerido: true }) +
+      '<p class="campo-ayuda" style="margin-bottom:var(--e3)">Nada aquí es obligatorio: complete lo ' +
+      'que tenga disponible y genere el documento igual — los campos vacíos quedan en blanco.</p>' +
+      campoTexto('nombre', 'Nombre del participante', caso.nombre, {}) +
+      campoTipoParticipante(caso.tipoParticipante) +
       campoTexto('run', 'RUN', caso.run, { marcador: '12.345.678-9',
         ayuda: 'Si se ingresa, se valida el dígito verificador. No es obligatorio.' }) +
-      campoTexto('telefono', 'Teléfono', caso.telefono, { requerido: true,
-        ayuda: telefono.principal ? 'Se usará el número ' + telefono.principal : '' }) +
+      campoTexto('telefono', 'Teléfono', caso.telefono,
+        { ayuda: telefono.principal ? 'Se usará el número ' + telefono.principal : '' }) +
+      '<button class="boton boton-secundario boton-pequeno" type="button" id="btnCopiarContacto" ' +
+      'style="margin-bottom:var(--e3)">Copiar nombre para agendar contacto</button>' +
       '<div class="rejilla rejilla-2">' +
-      campoTexto('fechaAudiencia', 'Fecha de audiencia', caso.fechaAudiencia, { requerido: true, tipo: 'date' }) +
-      campoTexto('horaAudiencia', 'Hora de audiencia', caso.horaAudiencia, { requerido: true, tipo: 'time' }) +
+      campoTexto('fechaAudiencia', 'Fecha de audiencia', caso.fechaAudiencia, { tipo: 'date' }) +
+      campoTexto('horaAudiencia', 'Hora de audiencia', caso.horaAudiencia, { tipo: 'time' }) +
       '</div>' +
       campoTipoAudiencia(caso.tipoAudiencia, caso.materia) +
       campoArea('citeseNotifiquese', 'Cítese / Notifíquese', caso.citeseNotifiquese,
-        { requerido: true, marcador: 'Texto de lo ordenado en la resolución…' }) +
+        { marcador: 'Texto de lo ordenado en la resolución…' }) +
       campoArea('apercibimiento', 'Apercibimiento', caso.apercibimiento,
         { ayuda: 'Si la resolución no lo contempla, deje el campo vacío.' }) +
       campoDocumentos(caso) +
@@ -2354,7 +2425,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div class="campo"><label for="f-resultado">Resultado</label><select id="f-resultado">' +
         ['', 'Positiva', 'Negativa', 'No realizada'].map(function (r) {
           return '<option value="' + r + '"' + (caso.resultado === r ? ' selected' : '') + '>' +
-            (r || 'Sin registrar') + '</option>';
+            escapar(etiquetaResultado(r)) + '</option>';
         }).join('') + '</select></div>' +
       campoTexto('notas', 'Notas', caso.notas, { marcador: 'D2' }) +
       '</div></div>';
@@ -2371,23 +2442,28 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#fichaSubtitulo').textContent = caso.tribunal + ' — correlativo N° ' + caso.correlativo;
     $('#fichaCuerpo').innerHTML = html;
 
-    var selectTipoAudiencia = $('#f-tipoAudiencia-select');
-    if (selectTipoAudiencia) {
-      var otroTipoAudiencia = $('#f-tipoAudiencia-otro');
-      var hiddenTipoAudiencia = $('#f-tipoAudiencia');
-      var sincronizarTipoAudiencia = function () {
-        if (selectTipoAudiencia.value === '__otro__') {
-          otroTipoAudiencia.style.display = '';
-          hiddenTipoAudiencia.value = otroTipoAudiencia.value.trim();
+    // Enlaza un <select> con opción "Otro" a su input de texto libre y a un
+    // campo oculto con el valor real, que es el que lee guardarFicha(). Mismo
+    // patrón para tipo de audiencia y para a quién se notifica.
+    function enlazarSelectConOtro(idSelect, idOtro, idHidden) {
+      var select = $('#' + idSelect);
+      if (!select) return;
+      var otro = $('#' + idOtro), hidden = $('#' + idHidden);
+      var sincronizar = function () {
+        if (select.value === '__otro__') {
+          otro.style.display = '';
+          hidden.value = otro.value.trim();
         } else {
-          otroTipoAudiencia.style.display = 'none';
-          hiddenTipoAudiencia.value = selectTipoAudiencia.value;
+          otro.style.display = 'none';
+          hidden.value = select.value;
         }
-        hiddenTipoAudiencia.dispatchEvent(new Event('input', { bubbles: true }));
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
       };
-      selectTipoAudiencia.addEventListener('change', sincronizarTipoAudiencia);
-      otroTipoAudiencia.addEventListener('input', sincronizarTipoAudiencia);
+      select.addEventListener('change', sincronizar);
+      otro.addEventListener('input', sincronizar);
     }
+    enlazarSelectConOtro('f-tipoAudiencia-select', 'f-tipoAudiencia-otro', 'f-tipoAudiencia');
+    enlazarSelectConOtro('f-tipoParticipante-select', 'f-tipoParticipante-otro', 'f-tipoParticipante');
 
     if (esAjeno(caso) || estaFinalizada(caso)) {
       $$('#fichaCuerpo input, #fichaCuerpo textarea, #fichaCuerpo select').forEach(function (campo) {
@@ -2429,6 +2505,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         var entrada = $('#nuevoDocumentoTexto');
         var texto = entrada.value.trim();
         if (!texto) return;
+        refrescarCasoAbierto();
         casoAbierto.documentosLista = casoAbierto.documentosLista || [];
         casoAbierto.documentosLista.push(texto);
         guardarAlmacen();
@@ -2445,6 +2522,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       $$('.documento-quitar').forEach(function (boton) {
         boton.addEventListener('click', function () {
           var indice = parseInt(boton.getAttribute('data-indice'), 10);
+          refrescarCasoAbierto();
           casoAbierto.documentosLista.splice(indice, 1);
           guardarAlmacen();
           abrirFicha(casoAbierto.id);
@@ -2491,10 +2569,15 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     if ($('#btnGuardarFicha')) {
       $('#btnGuardarFicha').addEventListener('click', function () { guardarFicha(true); });
     }
+    if ($('#btnCopiarContacto')) {
+      $('#btnCopiarContacto').addEventListener('click', function () {
+        copiarAlPortapapeles(nombreContacto(casoAbierto),
+          'Nombre de contacto copiado: péguelo al guardar el número en su celular.');
+      });
+    }
     if ($('#btnReabrirFicha')) {
       $('#btnReabrirFicha').addEventListener('click', function () {
-        var vivo = almacen.casos.find(function (c) { return c.id === casoAbierto.id; });
-        if (vivo) casoAbierto = vivo;
+        refrescarCasoAbierto();
         casoAbierto.bloqueado = false;
         guardarAlmacen();
         mostrarMensaje('Causa reabierta para edición.', '');
@@ -2505,6 +2588,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     if (noNotificable) {
       if ($('#btnGenerarFaltaAntecedentes')) {
         $('#btnGenerarFaltaAntecedentes').addEventListener('click', function () {
+          refrescarCasoAbierto();
           casoAbierto.motivoNoNotificable = ($('#f-motivoNoNotificable') || {}).value ||
             motivoSugerido(casoAbierto);
           guardarFicha(false);
@@ -2517,6 +2601,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       }
       if ($('#btnPdfFaltaAntecedentes')) {
         $('#btnPdfFaltaAntecedentes').addEventListener('click', function () {
+          refrescarCasoAbierto();
           casoAbierto.motivoNoNotificable = ($('#f-motivoNoNotificable') || {}).value ||
             motivoSugerido(casoAbierto);
           guardarFicha(false);
@@ -2526,19 +2611,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
           } catch (e) { mostrarMensaje('Error al preparar el PDF: ' + e.message, 'error'); }
         });
       }
-    } else {
-      // bloqueGenerar() no dibuja estos botones si la causa es ajena o está
-      // finalizada, así que hay que verificar que existan antes de engancharlos.
+    }
+    {
+      // Estos botones existen tanto en el panel normal como en el panel extra que
+      // aparece cuando, con teléfono inválido para WhatsApp, igual se logró
+      // contactar por llamada — por eso se enganchan aparte del "if (noNotificable)"
+      // de arriba, y siempre verificando que el botón exista antes de usarlo.
       if ($('#btnGenerarMensaje')) {
         $('#btnGenerarMensaje').addEventListener('click', function () { generar('mensaje'); });
       }
       if ($('#btnGenerarCertificacion')) {
         $('#btnGenerarCertificacion').addEventListener('click', function () { generar('certificacion'); });
-      }
-      if ($('#btnPdfMensaje')) {
-        $('#btnPdfMensaje').addEventListener('click', function () {
-          verPdf(plantillaDeMensaje(casoAbierto), 'Notificación', 'mensaje');
-        });
       }
       if ($('#btnPdfCertificacion')) {
         $('#btnPdfCertificacion').addEventListener('click', function () {
@@ -2566,9 +2649,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#panelFicha').setAttribute('aria-hidden', 'false');
   }
 
-  function copiarAlPortapapeles(texto) {
+  function copiarAlPortapapeles(texto, mensajeOk) {
     var terminar = function (ok) {
-      mostrarMensaje(ok ? 'Texto copiado: péguelo en el envío por WhatsApp.'
+      mostrarMensaje(ok ? (mensajeOk || 'Texto copiado: péguelo en el envío por WhatsApp.')
                         : 'No se pudo copiar automáticamente; el texto quedó seleccionado.', ok ? 'ok' : '');
     };
     if (navigator.clipboard && window.isSecureContext) {
@@ -2593,12 +2676,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   function guardarFicha(avisar) {
     if (!casoAbierto) return false;
-    // Si la planilla compartida sincronizó mientras la ficha estaba abierta,
-    // almacen.casos quedó con objetos nuevos y casoAbierto pasó a apuntar a uno
-    // huérfano fuera del arreglo: lo que se guardara ahí se perdería en
-    // silencio. Se recupera la referencia viva antes de tocar nada.
-    var vivo = almacen.casos.find(function (c) { return c.id === casoAbierto.id; });
-    if (vivo) casoAbierto = vivo;
+    refrescarCasoAbierto();
     if (esAjeno(casoAbierto)) return true;   // ficha de otro funcionario: se consulta, no se modifica
     if (estaFinalizada(casoAbierto)) return true;   // causa finalizada: hay que "Reabrir" primero
     var leer = function (clave) {
@@ -2617,7 +2695,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       return false;
     }
 
-    ['nombre', 'telefono', 'run', 'horaAudiencia', 'tipoAudiencia', 'citeseNotifiquese',
+    ['nombre', 'tipoParticipante', 'telefono', 'run', 'horaAudiencia', 'tipoAudiencia', 'citeseNotifiquese',
      'apercibimiento', 'fechaAudiencia', 'domicilioTribunal',
      'fechaNotificacion', 'horaNotificacion', 'certificacion', 'notas'].forEach(function (clave) {
       casoAbierto[clave] = leer(clave);
@@ -2719,36 +2797,45 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // resaltarlo y que se note cuál está activo al cambiar de uno a otro.
   function filtroIndicadorActivo() {
     if (filtros.sinResultado) return 'pendientes';
-    if (filtros.estado === ESTADOS.GENERADA) return 'generados';
-    if (filtros.estado === ESTADOS.NO_NOTIFICABLE) return 'nonotificable';
+    if (filtros.faltaInformacion) return 'nonotificable';
     if (filtros.resultado === 'Positiva') return 'positiva';
     if (filtros.resultado === 'Negativa') return 'negativa';
     if (filtros.resultado === 'No realizada') return 'norealizada';
     return 'total';
   }
 
+  // Criterio de los indicadores (blindado a pedido de JC 22-08-2026): cada causa
+  // cuenta en uno y sólo uno de estos 5 grupos, así siempre suman el total exacto:
+  //  - Pendientes: sin resultado y con datos válidos — se rebaja a Positiva/Negativa
+  //    a medida que el funcionario va notificando.
+  //  - Diligencias con falta de información: sin resultado Y con teléfono/nombre
+  //    inválido — se rebaja hacia "Realizada con certificación con observaciones"
+  //    (o a Positiva/Negativa si jefatura corrige el dato y sí se logra notificar).
+  //  - Diligencias positivas / negativas: como siempre.
+  //  - Realizada con certificación con observaciones: cualquier causa ya certificada
+  //    así, tenga o no además un problema de datos — al certificarse queda resuelta.
   function tarjetasIndicador() {
     var total = almacen.casos.length;
-    var cuenta = {};
-    Object.keys(ESTADOS).forEach(function (k) { cuenta[ESTADOS[k]] = 0; });
-    almacen.casos.forEach(function (c) { cuenta[c.estado] = (cuenta[c.estado] || 0) + 1; });
     var positivas = almacen.casos.filter(function (c) { return c.resultado === 'Positiva'; }).length;
     var negativas = almacen.casos.filter(function (c) { return c.resultado === 'Negativa'; }).length;
-    var noRealizadas = almacen.casos.filter(function (c) { return c.resultado === 'No realizada'; }).length;
-    // Pendientes = notificable (no "No notificable") y todavía sin diligencia certificada,
-    // sea cual sea su estado de avance de datos/documento.
+    var certificadasConObservaciones = almacen.casos.filter(function (c) {
+      return c.resultado === 'No realizada';
+    }).length;
+    var faltaInformacion = almacen.casos.filter(function (c) {
+      return c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado;
+    }).length;
     var pendientes = almacen.casos.filter(function (c) {
       return c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
     }).length;
     return [
       { valor: total, etiqueta: 'Casos recibidos', clase: '', filtro: 'total' },
       { valor: pendientes, etiqueta: 'Pendientes', clase: 'acento', filtro: 'pendientes' },
-      { valor: cuenta[ESTADOS.GENERADA], etiqueta: 'Con documento generado', clase: 'verde', filtro: 'generados' },
-      { valor: cuenta[ESTADOS.NO_NOTIFICABLE], etiqueta: 'Para devolver a jefatura', clase: 'rojo',
+      { valor: faltaInformacion, etiqueta: 'Diligencias con falta de información', clase: 'rojo',
         filtro: 'nonotificable' },
       { valor: positivas, etiqueta: 'Diligencias positivas', clase: 'verde', filtro: 'positiva' },
       { valor: negativas, etiqueta: 'Diligencias negativas', clase: 'ambar', filtro: 'negativa' },
-      { valor: noRealizadas, etiqueta: 'No realizadas', clase: 'gris', filtro: 'norealizada' }
+      { valor: certificadasConObservaciones, etiqueta: 'Realizada con certificación con observaciones',
+        clase: 'gris', filtro: 'norealizada' }
     ];
   }
 
@@ -2879,6 +2966,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // invente su paleta por defecto.
   var COLOR_POSITIVA = '#1E8E5A', COLOR_NEGATIVA = '#D97E00', COLOR_NOREALIZADA = '#9AA7BC',
       COLOR_PENDIENTE = '#D6336C', COLOR_AZUL = '#1D4E7E', COLOR_AZUL_PROFUNDO = '#0F2A4A',
+      COLOR_ROJO = '#C0392B',
       COLOR_TEXTO_SUAVE = '#5B6478', FUENTE_GRAFICO = "'Sora', -apple-system, 'Segoe UI', Roboto, sans-serif";
 
   var graficosTablero = {};   // instancias de Chart.js activas, para destruir antes de recrear
@@ -2901,13 +2989,19 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var noNotificables = 0, finalizadas = 0;
 
     casos.forEach(function (c) {
-      var r = c.resultado || 'Pendiente';
-      porResultado[r] = (porResultado[r] || 0) + 1;
       var materia = c.materia || 'Sin clasificar';
       porMateria[materia] = (porMateria[materia] || 0) + 1;
       var trib = c.tribunal || 'Sin tribunal';
       porTribunal[trib] = (porTribunal[trib] || 0) + 1;
-      if (c.estado === ESTADOS.NO_NOTIFICABLE) noNotificables++;
+      // "Diligencias con falta de información" cuenta sólo mientras la causa siga sin
+      // resultado; apenas se certifica (Positiva/Negativa/No realizada) pasa a contarse
+      // únicamente en ese resultado — así cada causa suma en un solo grupo, nunca en dos.
+      if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) {
+        noNotificables++;
+      } else {
+        var r = c.resultado || 'Pendiente';
+        porResultado[r] = (porResultado[r] || 0) + 1;
+      }
       if (c.bloqueado) finalizadas++;
       if (c.resultado && c.resultado !== 'Pendiente' && c.fechaNotificacion) {
         var dia = c.fechaNotificacion;
@@ -3008,8 +3102,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         m.gestionadas === 0 ? '' : m.tasaExito >= 60 ? 'verde' : m.tasaExito >= 40 ? 'ambar' : 'rojo') +
       tarjetaKpi(m.pendientes, 'Pendientes',
         'Causas notificables que todavía no tienen un resultado registrado.', 'acento') +
-      tarjetaKpi(m.noNotificables, 'No notificables',
-        'Se devuelven a jefatura por falta de datos o teléfono inválido.', m.noNotificables > 0 ? 'rojo' : '');
+      tarjetaKpi(m.noNotificables, 'Diligencias con falta de información',
+        'Teléfono inválido o sin nombre del participante; se rebaja al certificar.', m.noNotificables > 0 ? 'rojo' : '');
 
     // Tendencia: gestiones completadas por día, apiladas por resultado.
     var dias = m.diasOrdenados;
@@ -3020,7 +3114,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         datasets: [
           { label: 'Positiva', data: dias.map(function (d) { return m.porDia[d].Positiva; }), backgroundColor: COLOR_POSITIVA, borderRadius: 3 },
           { label: 'Negativa', data: dias.map(function (d) { return m.porDia[d].Negativa; }), backgroundColor: COLOR_NEGATIVA, borderRadius: 3 },
-          { label: 'No realizada', data: dias.map(function (d) { return m.porDia[d]['No realizada']; }), backgroundColor: COLOR_NOREALIZADA, borderRadius: 3 }
+          { label: 'Con observaciones', data: dias.map(function (d) { return m.porDia[d]['No realizada']; }), backgroundColor: COLOR_NOREALIZADA, borderRadius: 3 }
         ]
       },
       options: opcionesBarras({ apilado: true, leyenda: true })
@@ -3038,14 +3132,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         datasets: [
           { label: 'Positiva', data: [m.porResultado.Positiva], backgroundColor: COLOR_POSITIVA },
           { label: 'Negativa', data: [m.porResultado.Negativa], backgroundColor: COLOR_NEGATIVA },
-          { label: 'No realizada', data: [m.porResultado['No realizada']], backgroundColor: COLOR_NOREALIZADA },
-          { label: 'Pendiente', data: [m.porResultado.Pendiente], backgroundColor: COLOR_PENDIENTE }
+          { label: 'Con observaciones', data: [m.porResultado['No realizada']], backgroundColor: COLOR_NOREALIZADA },
+          { label: 'Pendiente', data: [m.porResultado.Pendiente], backgroundColor: COLOR_PENDIENTE },
+          { label: 'Falta de información', data: [m.noNotificables], backgroundColor: COLOR_ROJO }
         ]
       },
       options: opcionesBarras({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true })
     });
+    // Las cinco categorías son excluyentes entre sí (una causa con falta de información
+    // cuenta ahí sólo mientras siga sin resultado), así que siempre suman el total.
     $('#resultadosLectura').textContent = m.porResultado.Positiva + ' positivas, ' + m.porResultado.Negativa +
-      ' negativas, ' + m.porResultado['No realizada'] + ' no realizadas y ' + m.porResultado.Pendiente + ' pendiente(s).';
+      ' negativas, ' + m.porResultado['No realizada'] + ' con observaciones, ' + m.porResultado.Pendiente +
+      ' pendiente(s) y ' + m.noNotificables + ' con falta de información — suman ' + m.total + '.';
 
     // Causas por tribunal: barras horizontales, los 8 con más volumen.
     var topTribunales = m.tribunalesOrdenados.slice(0, 8);
