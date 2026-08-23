@@ -156,6 +156,13 @@ a { color: var(--azul-medio); }
   display: flex; align-items: center; gap: var(--e2);
 }
 .tarjeta-titulo::after { content: ''; flex: 1; height: 1px; background: var(--borde); }
+.tarjeta-titulo-fila { display: flex; align-items: center; gap: var(--e2); margin-bottom: var(--e3); }
+.tarjeta-titulo-fila .tarjeta-titulo { flex: 1; margin-bottom: 0; }
+.selector-periodo {
+  font: inherit; font-size: 12px; color: var(--texto-suave);
+  border: 1px solid var(--borde); border-radius: 6px; padding: 4px 8px;
+  background: var(--superficie); cursor: pointer;
+}
 
 .rejilla { display: grid; gap: var(--e3); }
 .rejilla-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
@@ -517,6 +524,19 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 .hoja-impresion table.tabla-doc td {
   border: 1px solid #999; padding: 5pt 8pt; vertical-align: top;
 }
+.impresion-dashboard {
+  font-family: 'Sora', Arial, sans-serif; color: var(--azul-profundo);
+}
+.impresion-dashboard h1 { font-size: 18pt; margin: 0 0 4pt; }
+.impresion-dashboard-meta { font-size: 10pt; color: #667085; margin: 0 0 16pt; }
+.impresion-dashboard-kpis {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10pt; margin: 0 0 18pt;
+}
+.impresion-dashboard-kpis .kpi { break-inside: avoid; }
+.impresion-dashboard-grafico { break-inside: avoid; margin: 0 0 18pt; }
+.impresion-dashboard-grafico h3 { font-size: 12pt; margin: 0 0 4pt; }
+.impresion-dashboard-grafico img { width: 100%; max-height: 220pt; object-fit: contain; display: block; }
+.impresion-dashboard-grafico p { font-size: 9.5pt; color: #667085; margin: 4pt 0 0; }
 .aviso-fidelidad {
   max-width: 210mm; width: 94vw; margin: var(--e3) 0 0; padding: 10px 16px;
   background: rgba(255,255,255,.92); border-radius: 8px; font-size: 12.5px; color: #4A4F57;
@@ -757,6 +777,7 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
     <div class="tablero-meta">
       <span id="tableroFechaCorte">Datos al —</span>
       <span class="tablero-fuente">Fuente: registro propio del CINJ (Planilla 1 + gestión de notificaciones)</span>
+      <button class="boton boton-secundario boton-pequeno" type="button" id="btnDashboardPdf">Descargar PDF para jefatura</button>
     </div>
 
     <div class="rejilla-kpi" id="tableroKpis"></div>
@@ -766,6 +787,18 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
         <div class="tarjeta-titulo">Tendencia de gestiones</div>
         <p class="campo-ayuda" id="tendenciaLectura">—</p>
         <div class="lienzo-grafico"><canvas id="graficoTendencia" role="img" aria-label="Tendencia de gestiones por día"></canvas></div>
+      </div>
+      <div class="tarjeta tarjeta-grafico">
+        <div class="tarjeta-titulo-fila">
+          <div class="tarjeta-titulo">Causas por fecha de carga</div>
+          <select id="selectorPeriodoCargas" class="selector-periodo">
+            <option value="dia">Por día</option>
+            <option value="semana" selected>Por semana</option>
+            <option value="mes">Por mes</option>
+          </select>
+        </div>
+        <p class="campo-ayuda" id="cargasLectura">—</p>
+        <div class="lienzo-grafico"><canvas id="graficoCargas" role="img" aria-label="Causas por fecha de carga, incluyendo pendientes"></canvas></div>
       </div>
       <div class="tarjeta tarjeta-grafico">
         <div class="tarjeta-titulo">Composición de resultados</div>
@@ -1183,15 +1216,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // mantiene la redacción natural ("la acta de..."); con varios, se enumeran
   // para que se lean claro tanto en el mensaje como en la certificación.
   // Compatible con casos antiguos que sólo tienen el campo de texto libre.
+  // El separador es MARCA_PARRAFO_DOC (no un simple "\n"): dividirParrafosPorMarca()
+  // lo convierte en un párrafo de Word real después del render — ver esa función
+  // para el porqué (un salto de línea "blando" dentro de un párrafo justificado
+  // hace que Word estire esa línea completa, dejando espacios enormes entre palabras).
   function textoDocumentos(caso) {
     var lista = (caso.documentosLista && caso.documentosLista.length)
       ? caso.documentosLista
       : (String(caso.documentos || '').trim() ? [caso.documentos.trim()] : []);
     if (!lista.length) return '';
     if (lista.length === 1) return lista[0];
-    // Salto de línea entre cada uno: docxtemplater (linebreaks:true) lo convierte en
-    // <w:br/> real, así quedan en filas separadas en el Word y no todos corridos.
-    return lista.map(function (texto, i) { return (i + 1) + ') ' + texto; }).join('\n');
+    return lista.map(function (texto, i) { return (i + 1) + ') ' + texto; }).join(MARCA_PARRAFO_DOC);
   }
 
   function nombreDudoso(nombre) {
@@ -1645,6 +1680,35 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     };
   }
 
+  // Carácter del área de uso privado Unicode: nunca lo escribe un funcionario a
+  // mano, así que sirve de marca inequívoca para dividirParrafosPorMarca().
+  var MARCA_PARRAFO_DOC = '';
+
+  // Convierte cada ocurrencia de la marca, dentro de un mismo <w:r>, en un párrafo
+  // de Word nuevo (mismo <w:pPr> del párrafo original, para heredar sangría y
+  // alineación) en vez de un salto de línea "blando" (<w:br/>). Es necesario
+  // porque en un párrafo justificado Word estira todas las líneas salvo la
+  // última: con <w:br/> cada ítem de una lista (salvo el último) salía con
+  // espacios enormes entre palabras; como párrafo propio, cada ítem es su
+  // única línea y nunca se estira.
+  function dividirParrafosPorMarca(xml, marca) {
+    return xml.replace(/<w:p\b([^>]*)>([\s\S]*?)<\/w:p>/g, function (todo, atrP, interior) {
+      if (interior.indexOf(marca) === -1) return todo;
+      var pPr = (interior.match(/^<w:pPr>[\s\S]*?<\/w:pPr>/) || [''])[0];
+      var interiorNuevo = interior.replace(/<w:r\b([^>]*)>([\s\S]*?)<\/w:r>/g, function (runCompleto, atrR, interiorR) {
+        var mt = interiorR.match(/^([\s\S]*?)<w:t\b([^>]*)>([\s\S]*?)<\/w:t>([\s\S]*)$/);
+        if (!mt || mt[3].indexOf(marca) === -1) return runCompleto;
+        var antes = mt[1], atrT = mt[2], texto = mt[3], despues = mt[4];
+        var partes = texto.split(marca);
+        return partes.map(function (parte, i) {
+          var pieza = '<w:r' + atrR + '>' + antes + '<w:t' + atrT + '>' + parte + '</w:t>' + despues + '</w:r>';
+          return i === 0 ? pieza : '</w:p><w:p' + atrP + '>' + pPr + pieza;
+        }).join('');
+      });
+      return '<w:p' + atrP + '>' + interiorNuevo + '</w:p>';
+    });
+  }
+
   function generarDocumento(clavePlantilla, caso) {
     var Constructor = window.docxtemplater && (window.docxtemplater.default || window.docxtemplater);
     if (!Constructor) throw new Error('No se pudo inicializar el generador de documentos.');
@@ -1656,7 +1720,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       nullGetter: function () { return ''; }
     });
     doc.render(datosParaPlantilla(caso, clavePlantilla));
-    return doc.getZip();
+    var zipGenerado = doc.getZip();
+    if (zipGenerado.file('word/document.xml')) {
+      var xml = zipGenerado.file('word/document.xml').asText();
+      if (xml.indexOf(MARCA_PARRAFO_DOC) >= 0) {
+        zipGenerado.file('word/document.xml', dividirParrafosPorMarca(xml, MARCA_PARRAFO_DOC));
+      }
+    }
+    return zipGenerado;
   }
 
   // Texto plano del documento generado, para copiar al envío por WhatsApp.
@@ -2341,6 +2412,20 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     // se traslada a la lista para no perder lo ya escrito.
     if (!Array.isArray(caso.documentosLista)) {
       caso.documentosLista = String(caso.documentos || '').trim() ? [caso.documentos.trim()] : [];
+    }
+
+    // Casos que no pasaron por el ingreso normal de Planilla 1 (el histórico, por
+    // ejemplo) nunca recibieron esta búsqueda automática de domicilio. Se completa
+    // acá, sólo si sigue vacío, para no pisar un domicilio ya cargado o corregido
+    // a mano; si hay coincidencia, queda guardado igual que si se hubiera resuelto
+    // en el ingreso normal.
+    if (caso.tribunal && !String(caso.domicilioTribunal || '').trim()) {
+      var domicilioEncontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
+      if (domicilioEncontrado.domicilio) {
+        caso.domicilioTribunal = domicilioEncontrado.domicilio;
+        caso.confianzaDomicilio = domicilioEncontrado.confianza;
+        guardarAlmacen();
+      }
     }
 
     var telefono = analizarTelefono(caso.telefono);
@@ -3048,6 +3133,57 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     };
   }
 
+  // Agrupa fechas para el gráfico "Causas por fecha de carga": día exacto,
+  // semana (lunes de esa semana) o mes. El histórico de hoy casi todo comparte
+  // una sola fecha de carga, así que agrupar por semana/mes lo hace legible; a
+  // futuro, con muchas cargas distintas, por día también sirve — por eso el
+  // selector de período en vez de un solo criterio fijo.
+  function inicioSemana(fecha) {
+    var f = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+    var dia = f.getDay();
+    f.setDate(f.getDate() + (dia === 0 ? -6 : 1 - dia));
+    return f;
+  }
+  function claveBucketCarga(fechaIso, periodo) {
+    var f = aFecha(fechaIso);
+    if (!f) return '';
+    if (periodo === 'semana') return aIso(inicioSemana(f));
+    if (periodo === 'mes') return f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0');
+    return aIso(f);
+  }
+  function etiquetaBucketCarga(clave, periodo) {
+    if (periodo === 'mes') {
+      var partes = clave.split('-');
+      return MESES[+partes[1] - 1].slice(0, 3) + ' ' + partes[0];
+    }
+    return fechaCorta(clave).slice(0, 5);
+  }
+
+  // A diferencia de "Tendencia de gestiones" (agrupada por fecha de gestión,
+  // donde las pendientes nunca aparecen porque no tienen esa fecha todavía),
+  // acá se agrupa por fecha de carga (fechaIngreso) y SÍ se incluyen las
+  // pendientes y las con falta de información — es justo lo que el otro
+  // gráfico no puede mostrar.
+  function metricasPorCarga(periodo) {
+    var buckets = {};
+    almacen.casos.forEach(function (c) {
+      if (!c.fechaIngreso) return;
+      var clave = claveBucketCarga(c.fechaIngreso, periodo);
+      if (!clave) return;
+      if (!buckets[clave]) {
+        buckets[clave] = { Positiva: 0, Negativa: 0, 'No realizada': 0, Pendiente: 0, FaltaInformacion: 0 };
+      }
+      if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) {
+        buckets[clave].FaltaInformacion++;
+      } else {
+        var r = c.resultado || 'Pendiente';
+        buckets[clave][r] = (buckets[clave][r] || 0) + 1;
+      }
+    });
+    var claves = Object.keys(buckets).sort();
+    return { claves: claves, buckets: buckets };
+  }
+
   function tarjetaKpi(valor, etiqueta, lectura, clase) {
     return '<div class="kpi' + (clase ? ' ' + clase : '') + '">' +
       '<div class="kpi-valor">' + escapar(String(valor)) + '</div>' +
@@ -3099,6 +3235,40 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     graficosTablero[clave] = new Chart(lienzo.getContext('2d'), config);
   }
 
+  // "Causas por fecha de carga": a diferencia de "Tendencia de gestiones",
+  // agrupa por fechaIngreso y sí muestra las pendientes y las con falta de
+  // información — es el gráfico que faltaba para ver el atraso por lote de
+  // carga, no sólo lo ya resuelto. Aparte de pintarDashboard() (que la llama
+  // al refrescar todo el tablero), el selector de período la vuelve a llamar
+  // solo a ella, sin recalcular el resto del tablero.
+  function pintarGraficoCargas() {
+    var selector = $('#selectorPeriodoCargas');
+    var periodo = selector ? selector.value : 'semana';
+    var d = metricasPorCarga(periodo);
+    crearOActualizarGrafico('cargas', 'graficoCargas', {
+      type: 'bar',
+      data: {
+        labels: d.claves.map(function (k) { return etiquetaBucketCarga(k, periodo); }),
+        datasets: [
+          { label: 'Positiva', data: d.claves.map(function (k) { return d.buckets[k].Positiva; }), backgroundColor: COLOR_POSITIVA, borderRadius: 3 },
+          { label: 'Negativa', data: d.claves.map(function (k) { return d.buckets[k].Negativa; }), backgroundColor: COLOR_NEGATIVA, borderRadius: 3 },
+          { label: 'Con observaciones', data: d.claves.map(function (k) { return d.buckets[k]['No realizada']; }), backgroundColor: COLOR_NOREALIZADA, borderRadius: 3 },
+          { label: 'Pendiente', data: d.claves.map(function (k) { return d.buckets[k].Pendiente; }), backgroundColor: COLOR_PENDIENTE, borderRadius: 3 },
+          { label: 'Falta de información', data: d.claves.map(function (k) { return d.buckets[k].FaltaInformacion; }), backgroundColor: COLOR_ROJO, borderRadius: 3 }
+        ]
+      },
+      options: opcionesBarras({ apilado: true, leyenda: true })
+    });
+    var totalCargado = d.claves.reduce(function (acc, k) {
+      var b = d.buckets[k];
+      return acc + b.Positiva + b.Negativa + b['No realizada'] + b.Pendiente + b.FaltaInformacion;
+    }, 0);
+    var unidad = periodo === 'dia' ? 'día(s)' : periodo === 'mes' ? 'mes(es)' : 'semana(s)';
+    $('#cargasLectura').textContent = d.claves.length
+      ? totalCargado + ' causa(s) cargada(s) en ' + d.claves.length + ' ' + unidad + '; incluye lo pendiente.'
+      : 'Todavía no hay causas cargadas.';
+  }
+
   // Se llama al cambiar a la pestaña y desde refrescar() mientras esté
   // activa, así el dashboard se pone al día solo con cada cambio (carga,
   // ficha guardada, sincronización con la planilla compartida), sin que
@@ -3142,6 +3312,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       ? 'Se registran ' + m.gestionadas + ' gestión(es) completada(s) entre el ' + fechaCorta(dias[0]) +
         ' y el ' + fechaCorta(dias[dias.length - 1]) + '.'
       : 'Todavía no hay gestiones completadas para graficar.';
+
+    pintarGraficoCargas();
 
     // Composición de resultados: una sola barra horizontal apilada. 5 categorías
     // mutuamente excluyentes (Pendientes por diligenciar y Falta de información son las
@@ -3195,6 +3367,36 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
           return mt + ': ' + (m.total ? Math.round(m.porMateria[mt] / m.total * 100) : 0) + '%';
         }).join(' · ')
       : 'Todavía no hay causas cargadas.';
+  }
+
+  // Arma una versión imprimible del dashboard (KPIs + gráficos convertidos a
+  // imagen) y la pasa por la misma vista de impresión que ya usan los
+  // documentos generados: mismo botón "Guardar como PDF" (impresión del
+  // navegador), sin agregar ninguna librería nueva de exportación a PDF.
+  function exportarDashboardPdf() {
+    if (typeof Chart === 'undefined') return;
+    cambiarVista('dashboard');
+    pintarDashboard();
+    // Los gráficos se dibujan con animación (opcionesBarras) vía requestAnimationFrame;
+    // toDataURL() llamado justo después de crearlos capturaría un canvas todavía en
+    // blanco. update('none') fuerza el redibujado completo de inmediato, sin animar.
+    Object.keys(graficosTablero).forEach(function (clave) { graficosTablero[clave].update('none'); });
+    var html = '<div class="impresion-dashboard">' +
+      '<h1>Informe ejecutivo · Notificaciones CINJ</h1>' +
+      '<p class="impresion-dashboard-meta">' + escapar($('#tableroFechaCorte').textContent) + '</p>' +
+      '<div class="impresion-dashboard-kpis">' + $('#tableroKpis').innerHTML + '</div>';
+    $$('#vista-dashboard .tarjeta-grafico').forEach(function (tarjeta) {
+      var titulo = tarjeta.querySelector('.tarjeta-titulo');
+      var lectura = tarjeta.querySelector('.campo-ayuda');
+      var lienzo = tarjeta.querySelector('canvas');
+      if (!lienzo) return;
+      html += '<div class="impresion-dashboard-grafico">' +
+        '<h3>' + escapar(titulo ? titulo.textContent : '') + '</h3>' +
+        '<img src="' + lienzo.toDataURL('image/png', 1) + '" alt="">' +
+        (lectura ? '<p>' + escapar(lectura.textContent) + '</p>' : '') + '</div>';
+    });
+    html += '</div>';
+    abrirImpresion('Informe ejecutivo · Notificaciones CINJ · ' + fechaCorta(new Date()), html);
   }
 
   /* ---------- Navegación y refresco ---------- */
@@ -3429,6 +3631,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#velo').addEventListener('click', cerrarFicha);
     $('#btnCerrarImpresion').addEventListener('click', cerrarImpresion);
     $('#btnImprimirAhora').addEventListener('click', function () { window.print(); });
+    if ($('#btnDashboardPdf')) $('#btnDashboardPdf').addEventListener('click', exportarDashboardPdf);
+    if ($('#selectorPeriodoCargas')) $('#selectorPeriodoCargas').addEventListener('change', pintarGraficoCargas);
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if ($('#vistaImpresion').classList.contains('visible')) cerrarImpresion();
