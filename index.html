@@ -674,11 +674,9 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
     </button>
     <button class="etapa" type="button" data-vista="casos">
       <span class="etapa-numero">2</span> Completar datos
-      <span class="etapa-cuenta" id="cuentaCasos">0</span>
     </button>
     <button class="etapa" type="button" data-vista="documentos">
       <span class="etapa-numero">3</span> Documentos
-      <span class="etapa-cuenta" id="cuentaListos">0</span>
     </button>
     <button class="etapa" type="button" data-vista="control">
       <span class="etapa-numero">4</span> Control y reportabilidad
@@ -970,7 +968,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Bloqueo temporal a pedido de JC (22-08-2026): mientras se trabaja sólo con el
   // histórico ya importado, no se debe poder cargar una Planilla 1 nueva — la primera
   // carga real es el lunes. Cambiar a "true" (y reconstruir) para volver a habilitarlo.
-  var INGRESO_HABILITADO = false;
+  var INGRESO_HABILITADO = true;
 
   var ESTADOS = {
     RECIBIDO: 'Recibido',
@@ -3559,16 +3557,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function refrescar() {
-    var pendientes = almacen.casos.filter(function (c) {
-      return c.estado === ESTADOS.RECIBIDO;
-    }).length;
-    // El número junto a "Documentos" refleja lo ya generado, que es lo que esa
-    // pestaña muestra ahora (trazabilidad, no una cola de trabajo pendiente).
-    var generados = almacen.casos.reduce(function (n, c) {
-      return n + (c.documentosGenerados || []).length;
-    }, 0);
-    $('#cuentaCasos').textContent = pendientes;
-    $('#cuentaListos').textContent = generados;
     pintarFiltroTribunal();
     pintarListaCasos();
     pintarHistorialDocumentos();
