@@ -611,8 +611,15 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 }
 
 @media print {
-  .encabezado-acciones, .etapas, .filtros, .panel, .velo, .pie { display: none !important; }
-  body > *:not(.vista-impresion) { display: none !important; }
+  /* #vistaImpresion vive dentro de .app-protegida (no es hijo directo de
+     <body>), así que ocultar "todo lo que no sea .vista-impresion" con un
+     selector body > *:not(...) ocultaba a .app-protegida entero — y con él,
+     a su hijo .vista-impresion también, dejando el PDF completamente en
+     blanco. Se listan explícitamente los bloques a ocultar en su lugar. */
+  .pantalla-acceso, .encabezado, .etapas, .contenido, .pie, .panel, .velo, .mensaje-flotante {
+    display: none !important;
+  }
+  .app-protegida { display: block !important; }
   .vista-impresion {
     position: static; display: block !important; background: #fff; overflow: visible;
   }
