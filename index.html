@@ -635,6 +635,11 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
          La carga es acumulativa: los casos ya trabajados no se sobrescriben, se identifican por RIT + correlativo.</p>
     </div>
 
+    <div class="aviso aviso-error" id="avisoIngresoBloqueado" style="display:none; margin-bottom:var(--e3)">
+      <div><strong>Ingreso deshabilitado por ahora.</strong> Se está trabajando sólo con el histórico ya
+      cargado; la primera Planilla 1 nueva se sube el lunes.</div>
+    </div>
+
     <div class="zona-carga" id="zonaCarga" tabindex="0" role="button" aria-label="Cargar Planilla 1">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v13"/>
@@ -884,6 +889,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   var CLAVE_ALMACEN = 'cinj.notificaciones.v1';
   var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
                'agosto','septiembre','octubre','noviembre','diciembre'];
+
+  // Bloqueo temporal a pedido de JC (22-08-2026): mientras se trabaja sólo con el
+  // histórico ya importado, no se debe poder cargar una Planilla 1 nueva — la primera
+  // carga real es el lunes. Cambiar a "true" (y reconstruir) para volver a habilitarlo.
+  var INGRESO_HABILITADO = false;
 
   var ESTADOS = {
     RECIBIDO: 'Recibido',
@@ -2025,7 +2035,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return almacen.casos.filter(function (caso) {
       if (filtros.estado && caso.estado !== filtros.estado) return false;
       if (filtros.resultado && caso.resultado !== filtros.resultado) return false;
-      if (filtros.sinResultado && (caso.resultado || caso.estado === ESTADOS.NO_NOTIFICABLE)) return false;
+      // "Pendiente" es exactamente lo que dice la columna Resultado: sin excepciones,
+      // ni siquiera para las que además tienen un problema de teléfono/nombre — esas
+      // se destacan aparte en "Diligencias con falta de información", pero siguen
+      // contando también como pendientes mientras no tengan un resultado.
+      if (filtros.sinResultado && caso.resultado) return false;
       // "Diligencias con falta de información": sin resultado Y con teléfono/nombre inválido.
       // Apenas se certifica (queda con un resultado), sale de esta lista y pasa a contarse
       // sólo en su resultado — así nunca se cuenta una causa dos veces.
@@ -2804,16 +2818,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return 'total';
   }
 
-  // Criterio de los indicadores (blindado a pedido de JC 22-08-2026): cada causa
-  // cuenta en uno y sólo uno de estos 5 grupos, así siempre suman el total exacto:
-  //  - Pendientes: sin resultado y con datos válidos — se rebaja a Positiva/Negativa
-  //    a medida que el funcionario va notificando.
-  //  - Diligencias con falta de información: sin resultado Y con teléfono/nombre
-  //    inválido — se rebaja hacia "Realizada con certificación con observaciones"
-  //    (o a Positiva/Negativa si jefatura corrige el dato y sí se logra notificar).
+  // Criterio de los indicadores (blindado a pedido de JC 22-08-2026, ajustado el mismo
+  // día: "Pendientes" debe calzar siempre con la columna Resultado de la planilla, sin
+  // ninguna excepción):
+  //  - Pendientes: TODA causa sin resultado registrado, sin excepciones — coincide
+  //    exactamente con cuántas celdas de la columna Resultado están vacías.
+  //  - Diligencias con falta de información: subconjunto de Pendientes — de las que
+  //    están sin resultado, cuáles además tienen teléfono/nombre inválido. Se destaca
+  //    aparte para que el funcionario sepa cuáles no puede simplemente notificar sin
+  //    antes conseguir el dato correcto.
   //  - Diligencias positivas / negativas: como siempre.
   //  - Realizada con certificación con observaciones: cualquier causa ya certificada
-  //    así, tenga o no además un problema de datos — al certificarse queda resuelta.
+  //    así, tenga o no además un problema de datos.
   function tarjetasIndicador() {
     var total = almacen.casos.length;
     var positivas = almacen.casos.filter(function (c) { return c.resultado === 'Positiva'; }).length;
@@ -2824,9 +2840,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var faltaInformacion = almacen.casos.filter(function (c) {
       return c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado;
     }).length;
-    var pendientes = almacen.casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
-    }).length;
+    var pendientes = almacen.casos.filter(function (c) { return !c.resultado; }).length;
     return [
       { valor: total, etiqueta: 'Casos recibidos', clase: '', filtro: 'total' },
       { valor: pendientes, etiqueta: 'Pendientes', clase: 'acento', filtro: 'pendientes' },
@@ -2993,15 +3007,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       porMateria[materia] = (porMateria[materia] || 0) + 1;
       var trib = c.tribunal || 'Sin tribunal';
       porTribunal[trib] = (porTribunal[trib] || 0) + 1;
-      // "Diligencias con falta de información" cuenta sólo mientras la causa siga sin
-      // resultado; apenas se certifica (Positiva/Negativa/No realizada) pasa a contarse
-      // únicamente en ese resultado — así cada causa suma en un solo grupo, nunca en dos.
-      if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) {
-        noNotificables++;
-      } else {
-        var r = c.resultado || 'Pendiente';
-        porResultado[r] = (porResultado[r] || 0) + 1;
-      }
+      // porResultado sigue exactamente la columna Resultado, sin excepciones — "Pendiente"
+      // incluye TODA causa sin resultado, tenga o no además un problema de datos.
+      // "noNotificables" es aparte, un subconjunto que se destaca (no se resta de Pendiente).
+      var r = c.resultado || 'Pendiente';
+      porResultado[r] = (porResultado[r] || 0) + 1;
+      if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) noNotificables++;
       if (c.bloqueado) finalizadas++;
       if (c.resultado && c.resultado !== 'Pendiente' && c.fechaNotificacion) {
         var dia = c.fechaNotificacion;
@@ -3010,9 +3021,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       }
     });
 
-    var pendientes = casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
-    }).length;
+    var pendientes = casos.filter(function (c) { return !c.resultado; }).length;
     var gestionadas = porResultado.Positiva + porResultado.Negativa + porResultado['No realizada'];
     var tasaExito = gestionadas ? Math.round(porResultado.Positiva / gestionadas * 100) : 0;
     var avance = total ? Math.round(finalizadas / total * 100) : 0;
@@ -3101,9 +3110,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         'Sobre ' + m.gestionadas + ' gestión(es) realizada(s); no incluye pendientes.',
         m.gestionadas === 0 ? '' : m.tasaExito >= 60 ? 'verde' : m.tasaExito >= 40 ? 'ambar' : 'rojo') +
       tarjetaKpi(m.pendientes, 'Pendientes',
-        'Causas notificables que todavía no tienen un resultado registrado.', 'acento') +
+        'Todas las causas sin resultado registrado — coincide con la columna Resultado.', 'acento') +
       tarjetaKpi(m.noNotificables, 'Diligencias con falta de información',
-        'Teléfono inválido o sin nombre del participante; se rebaja al certificar.', m.noNotificables > 0 ? 'rojo' : '');
+        'De las pendientes, cuáles además tienen teléfono o nombre inválido.', m.noNotificables > 0 ? 'rojo' : '');
 
     // Tendencia: gestiones completadas por día, apiladas por resultado.
     var dias = m.diasOrdenados;
@@ -3124,7 +3133,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         ' y el ' + fechaCorta(dias[dias.length - 1]) + '.'
       : 'Todavía no hay gestiones completadas para graficar.';
 
-    // Composición de resultados: una sola barra horizontal apilada.
+    // Composición de resultados: una sola barra horizontal apilada. Estas 4 categorías
+    // calzan exactamente con la columna Resultado de la planilla (Pendiente = todas las
+    // celdas vacías, sin excepciones), así que siempre suman el total de causas.
     crearOActualizarGrafico('resultados', 'graficoResultados', {
       type: 'bar',
       data: {
@@ -3133,17 +3144,15 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
           { label: 'Positiva', data: [m.porResultado.Positiva], backgroundColor: COLOR_POSITIVA },
           { label: 'Negativa', data: [m.porResultado.Negativa], backgroundColor: COLOR_NEGATIVA },
           { label: 'Con observaciones', data: [m.porResultado['No realizada']], backgroundColor: COLOR_NOREALIZADA },
-          { label: 'Pendiente', data: [m.porResultado.Pendiente], backgroundColor: COLOR_PENDIENTE },
-          { label: 'Falta de información', data: [m.noNotificables], backgroundColor: COLOR_ROJO }
+          { label: 'Pendiente', data: [m.porResultado.Pendiente], backgroundColor: COLOR_PENDIENTE }
         ]
       },
       options: opcionesBarras({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true })
     });
-    // Las cinco categorías son excluyentes entre sí (una causa con falta de información
-    // cuenta ahí sólo mientras siga sin resultado), así que siempre suman el total.
     $('#resultadosLectura').textContent = m.porResultado.Positiva + ' positivas, ' + m.porResultado.Negativa +
-      ' negativas, ' + m.porResultado['No realizada'] + ' con observaciones, ' + m.porResultado.Pendiente +
-      ' pendiente(s) y ' + m.noNotificables + ' con falta de información — suman ' + m.total + '.';
+      ' negativas, ' + m.porResultado['No realizada'] + ' con observaciones y ' + m.porResultado.Pendiente +
+      ' pendiente(s) — suman ' + m.total + '. De las pendientes, ' + m.noNotificables +
+      ' además tienen teléfono o nombre inválido (ver "Diligencias con falta de información").';
 
     // Causas por tribunal: barras horizontales, los 8 con más volumen.
     var topTribunales = m.tribunalesOrdenados.slice(0, 8);
@@ -3342,6 +3351,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   function leerArchivoPlanilla(archivo) {
     if (!archivo) return;
+    if (!INGRESO_HABILITADO) {
+      mostrarMensaje('El ingreso de Planilla 1 está deshabilitado por ahora: se está trabajando ' +
+        'sólo con el histórico ya cargado.', 'error');
+      return;
+    }
     if (!/\.(xlsx|xlsm|xls)$/i.test(archivo.name)) {
       mostrarMensaje('El archivo debe ser una planilla Excel (.xlsx o .xls).', 'error');
       return;
@@ -3369,6 +3383,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
 
     var zona = $('#zonaCarga'), entrada = $('#archivoPlanilla');
+    if (!INGRESO_HABILITADO) {
+      $('#avisoIngresoBloqueado').style.display = '';
+      zona.style.opacity = '.5';
+      zona.style.pointerEvents = 'none';
+    }
     zona.addEventListener('click', function () { entrada.click(); });
     zona.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); entrada.click(); }
