@@ -63,7 +63,7 @@ a { color: var(--azul-medio); }
   border-bottom: 3px solid var(--acento);
 }
 .encabezado-interior {
-  max-width: 1440px; margin: 0 auto;
+  max-width: min(1720px, 96vw); margin: 0 auto;
   padding: var(--e3) var(--e4);
   display: flex; align-items: center; gap: var(--e3); flex-wrap: wrap;
 }
@@ -97,7 +97,7 @@ a { color: var(--azul-medio); }
   position: sticky; top: 0; z-index: 40;
 }
 .etapas-interior {
-  max-width: 1440px; margin: 0 auto; padding: var(--e3) var(--e4);
+  max-width: min(1720px, 96vw); margin: 0 auto; padding: var(--e3) var(--e4);
   display: flex; gap: var(--e2); overflow-x: auto; scrollbar-width: thin;
 }
 .etapa {
@@ -133,7 +133,7 @@ a { color: var(--azul-medio); }
 .etapa.activa .etapa-cuenta { background: rgba(255,255,255,.2); color: #fff; }
 
 /* ---------- Estructura ---------- */
-.contenido { max-width: 1440px; margin: 0 auto; padding: var(--e4); }
+.contenido { max-width: min(1720px, 96vw); margin: 0 auto; padding: var(--e4); }
 .vista { display: none; animation: aparecer 220ms ease both; }
 .vista.activa { display: block; }
 @keyframes aparecer { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -482,7 +482,7 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 }
 
 .pie {
-  max-width: 1440px; margin: 0 auto; padding: var(--e4);
+  max-width: min(1720px, 96vw); margin: 0 auto; padding: var(--e4);
   color: var(--texto-suave); font-size: 12.5px;
   border-top: 1px solid var(--borde); margin-top: var(--e5);
   display: flex; justify-content: space-between; gap: var(--e3); flex-wrap: wrap;
