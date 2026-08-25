@@ -2049,7 +2049,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       return {
         rit: c.rit || '', nombre: c.nombre || '', calidad: c.tipoParticipante || '',
         materia: c.materia || 'Sin clasificar', tribunal: c.tribunal || 'Sin tribunal',
-        audiencia: fechaCorta(c.fechaAudiencia) || '', run: enmascararRun(c.run) || '',
+        audiencia: fechaCorta(c.fechaAudiencia) || '', audienciaIso: c.fechaAudiencia || '',
+        run: enmascararRun(c.run) || '',
         telefono: enmascararTelefono(c.telefono) || '', estado: c.estado || '',
         resultado: etiquetaResultado(c.resultado), resultadoCrudo: c.resultado || '',
         pendiente: c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado,
@@ -2093,11 +2094,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '.filtro-tipo-activo{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy);margin-top:12px}',
       '.filtro-tipo-activo button{font:inherit;border:none;background:var(--navy);color:#fff;border-radius:20px;',
       'padding:3px 11px;cursor:pointer}',
-      '.rej-graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}',
-      '.grafico-ancho{grid-column:1/-1}',
-      '.lienzo{position:relative;height:240px}',
-      '.lienzo-ancho{height:300px}',
+      '.rej-graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}',
+      '.lienzo{position:relative;height:260px}',
       '.pista-clic{font-size:11px;color:var(--suave);margin:-8px 0 10px}',
+      '.periodo-grupo{display:flex;gap:6px;flex-wrap:wrap}',
+      '.periodo-boton{font:inherit;font-size:12.5px;padding:7px 13px;border-radius:20px;border:1px solid var(--borde);',
+      'background:#fff;color:var(--suave);cursor:pointer;white-space:nowrap;transition:background .15s,color .15s}',
+      '.periodo-boton:hover{border-color:var(--navy);color:var(--navy)}',
+      '.periodo-boton.activo{background:var(--navy);border-color:var(--navy);color:#fff}',
       'table{border-collapse:collapse;width:100%;font-size:13px}',
       'th{background:#F2F5F9;color:var(--navy);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;',
       'text-align:left;padding:9px 12px;border-bottom:1px solid var(--borde);cursor:pointer;user-select:none;',
@@ -2109,8 +2113,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       'footer{max-width:min(1720px,96vw);margin:0 auto;padding:20px;color:var(--suave);font-size:12px;',
       'border-top:1px solid var(--borde)}',
       '.contador{font-size:12.5px;color:var(--suave);margin-top:10px}',
-      '@media (max-width:640px){.filtros select,.filtros input{min-width:0;flex:1 1 45%}.lienzo{height:200px}',
-      '.lienzo-ancho{height:260px}}'
+      '@media (max-width:640px){.filtros select,.filtros input{min-width:0;flex:1 1 45%}.lienzo{height:220px}}'
     ].join('');
 
     var html = '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
@@ -2126,7 +2129,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div><label for="fEstado">Estado</label><select id="fEstado"><option value="">Todos</option></select></div>' +
       '<div><label for="fTexto">Buscar</label><input type="search" id="fTexto" placeholder="RIT, nombre o tribunal…"></div>' +
       '<button type="button" id="btnLimpiar">Limpiar filtros</button>' +
+      '</div>' +
+      '<div style="margin-top:14px"><label style="display:block;font-size:11.5px;font-weight:600;color:var(--suave);' +
+      'margin-bottom:6px">Período (fecha de audiencia)</label>' +
+      '<div class="periodo-grupo" id="periodoGrupo">' +
+      '<button type="button" class="periodo-boton activo" data-periodo="todo">Todo</button>' +
+      '<button type="button" class="periodo-boton" data-periodo="ult30">Últimos 30 días</button>' +
+      '<button type="button" class="periodo-boton" data-periodo="ult7">Últimos 7 días</button>' +
+      '<button type="button" class="periodo-boton" data-periodo="prox7">Próximos 7 días</button>' +
+      '<button type="button" class="periodo-boton" data-periodo="prox30">Próximos 30 días</button>' +
       '</div></div>' +
+      '</div>' +
 
       '<div class="tarjeta"><h2>Estado al ' + escapar(fechaCorta(new Date())) + '</h2>' +
       '<p class="pista-clic">Clic en una tarjeta para ver esos casos en el detalle de abajo.</p>' +
@@ -2137,9 +2150,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<p class="pista-clic">Clic en un color del gráfico para filtrar por ese resultado.</p>' +
       '<div class="lienzo"><canvas id="gResultados"></canvas></div></div>' +
       '<div class="tarjeta"><h2>Materia</h2><div class="lienzo"><canvas id="gMateria"></canvas></div></div>' +
-      '<div class="tarjeta grafico-ancho"><h2>Causas por tribunal</h2>' +
+      '<div class="tarjeta"><h2>Causas por tribunal</h2>' +
       '<p class="pista-clic">Clic en una barra para filtrar por ese tribunal.</p>' +
-      '<div class="lienzo lienzo-ancho"><canvas id="gTribunal"></canvas></div></div>' +
+      '<div class="lienzo"><canvas id="gTribunal"></canvas></div></div>' +
       '</div>' +
 
       '<div class="tarjeta"><h2>Detalle de casos</h2><div class="env"><table id="tablaDetalle"><thead><tr>' +
@@ -2181,8 +2194,32 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       // muestran el desglose completo, para que se puedan seguir comparando
       // entre sí y volver a hacer clic en otro).
       '  var filtroTipo = "";\n' +
+      '  var filtroPeriodo = "todo";\n' +
       '  var ETIQUETAS_TIPO = { positiva: "Positiva", negativa: "Negativa",\n' +
       '    observaciones: "Con observaciones", pendiente: "Pendiente", faltaInfo: "Falta de información" };\n' +
+      // Período móvil: ventanas relativas a HOY (la fecha real de quien abre el
+      // informe, no la de cuando se generó), sobre la fecha de audiencia. Las
+      // fechas ISO (aaaa-mm-dd) se pueden comparar como texto sin parsear.
+      '  function iso(fecha) {\n' +
+      '    return fecha.getFullYear() + "-" + String(fecha.getMonth() + 1).padStart(2, "0") + "-" +\n' +
+      '      String(fecha.getDate()).padStart(2, "0");\n' +
+      '  }\n' +
+      '  function sumarDias(fechaIso, dias) {\n' +
+      '    var p = fechaIso.split("-");\n' +
+      '    var f = new Date(+p[0], +p[1] - 1, +p[2]);\n' +
+      '    f.setDate(f.getDate() + dias);\n' +
+      '    return iso(f);\n' +
+      '  }\n' +
+      '  var HOY = iso(new Date());\n' +
+      '  function aplicaPeriodo(d) {\n' +
+      '    if (filtroPeriodo === "todo") return true;\n' +
+      '    if (!d.audienciaIso) return false;\n' +
+      '    if (filtroPeriodo === "prox7") return d.audienciaIso >= HOY && d.audienciaIso <= sumarDias(HOY, 7);\n' +
+      '    if (filtroPeriodo === "prox30") return d.audienciaIso >= HOY && d.audienciaIso <= sumarDias(HOY, 30);\n' +
+      '    if (filtroPeriodo === "ult7") return d.audienciaIso <= HOY && d.audienciaIso >= sumarDias(HOY, -7);\n' +
+      '    if (filtroPeriodo === "ult30") return d.audienciaIso <= HOY && d.audienciaIso >= sumarDias(HOY, -30);\n' +
+      '    return true;\n' +
+      '  }\n' +
       "  function $(s){ return document.querySelector(s); }\n" +
       "  function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }\n" +
       "  function normalizar(t){ return String(t||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase(); }\n" +
@@ -2206,6 +2243,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '      if (tribunal && d.tribunal !== tribunal) return false;\n' +
       '      if (estado && d.estado !== estado) return false;\n' +
       "      if (texto && normalizar(d.rit + ' ' + d.nombre + ' ' + d.tribunal).indexOf(texto) < 0) return false;\n" +
+      '      if (!aplicaPeriodo(d)) return false;\n' +
       '      return true;\n' +
       '    });\n' +
       '  }\n' +
@@ -2316,9 +2354,16 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '  });\n' +
       '  ["#fMateria", "#fTribunal", "#fEstado"].forEach(function (id) { $(id).addEventListener("change", pintar); });\n' +
       "  $('#fTexto').addEventListener('input', pintar);\n" +
+      "  $('#periodoGrupo').addEventListener('click', function (e) {\n" +
+      '    var boton = e.target.closest("[data-periodo]"); if (!boton) return;\n' +
+      '    filtroPeriodo = boton.getAttribute("data-periodo");\n' +
+      '    $$("#periodoGrupo .periodo-boton").forEach(function (b) { b.classList.toggle("activo", b === boton); });\n' +
+      '    pintar();\n' +
+      '  });\n' +
       "  $('#btnLimpiar').addEventListener('click', function () {\n" +
       "    $('#fMateria').value = ''; $('#fTribunal').value = ''; $('#fEstado').value = ''; $('#fTexto').value = '';\n" +
-      '    filtroTipo = "";\n' +
+      '    filtroTipo = ""; filtroPeriodo = "todo";\n' +
+      '    $$("#periodoGrupo .periodo-boton").forEach(function (b) { b.classList.toggle("activo", b.getAttribute("data-periodo") === "todo"); });\n' +
       '    pintar();\n' +
       '  });\n' +
       '  var orden = { campo: null, asc: true };\n' +
