@@ -2094,14 +2094,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '.filtro-tipo-activo{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy);margin-top:12px}',
       '.filtro-tipo-activo button{font:inherit;border:none;background:var(--navy);color:#fff;border-radius:20px;',
       'padding:3px 11px;cursor:pointer}',
-      '.rej-graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}',
+      '.rej-graficos{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:16px}',
+      '@media (max-width:900px){.rej-graficos{grid-template-columns:1fr}}',
       '.lienzo{position:relative;height:260px}',
       '.pista-clic{font-size:11px;color:var(--suave);margin:-8px 0 10px}',
+      '.periodo-fila{display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap}',
       '.periodo-grupo{display:flex;gap:6px;flex-wrap:wrap}',
       '.periodo-boton{font:inherit;font-size:12.5px;padding:7px 13px;border-radius:20px;border:1px solid var(--borde);',
       'background:#fff;color:var(--suave);cursor:pointer;white-space:nowrap;transition:background .15s,color .15s}',
       '.periodo-boton:hover{border-color:var(--navy);color:var(--navy)}',
       '.periodo-boton.activo{background:var(--navy);border-color:var(--navy);color:#fff}',
+      '.linea-tiempo{flex:1;min-width:260px}',
+      '.linea-tiempo-lienzo{position:relative;height:64px}',
       'table{border-collapse:collapse;width:100%;font-size:13px}',
       'th{background:#F2F5F9;color:var(--navy);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;',
       'text-align:left;padding:9px 12px;border-bottom:1px solid var(--borde);cursor:pointer;user-select:none;',
@@ -2131,13 +2135,16 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<button type="button" id="btnLimpiar">Limpiar filtros</button>' +
       '</div>' +
       '<div style="margin-top:14px"><label style="display:block;font-size:11.5px;font-weight:600;color:var(--suave);' +
-      'margin-bottom:6px">Período (fecha de audiencia)</label>' +
+      'margin-bottom:6px">Período (fecha de audiencia) — ventana móvil respecto a hoy</label>' +
+      '<div class="periodo-fila">' +
       '<div class="periodo-grupo" id="periodoGrupo">' +
       '<button type="button" class="periodo-boton activo" data-periodo="todo">Todo</button>' +
       '<button type="button" class="periodo-boton" data-periodo="ult30">Últimos 30 días</button>' +
       '<button type="button" class="periodo-boton" data-periodo="ult7">Últimos 7 días</button>' +
       '<button type="button" class="periodo-boton" data-periodo="prox7">Próximos 7 días</button>' +
       '<button type="button" class="periodo-boton" data-periodo="prox30">Próximos 30 días</button>' +
+      '</div>' +
+      '<div class="linea-tiempo"><div class="linea-tiempo-lienzo"><canvas id="gLineaTiempo"></canvas></div></div>' +
       '</div></div>' +
       '</div>' +
 
@@ -2211,14 +2218,54 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    return iso(f);\n' +
       '  }\n' +
       '  var HOY = iso(new Date());\n' +
+      // filtroPeriodo también puede ser "mes:aaaa-mm" al hacer clic en una barra
+      // de la línea de tiempo — el mes de la audiencia se compara como texto
+      // (los primeros 7 caracteres de un ISO aaaa-mm-dd son justo "aaaa-mm").
       '  function aplicaPeriodo(d) {\n' +
       '    if (filtroPeriodo === "todo") return true;\n' +
       '    if (!d.audienciaIso) return false;\n' +
+      '    if (filtroPeriodo.indexOf("mes:") === 0) return d.audienciaIso.indexOf(filtroPeriodo.slice(4)) === 0;\n' +
       '    if (filtroPeriodo === "prox7") return d.audienciaIso >= HOY && d.audienciaIso <= sumarDias(HOY, 7);\n' +
       '    if (filtroPeriodo === "prox30") return d.audienciaIso >= HOY && d.audienciaIso <= sumarDias(HOY, 30);\n' +
       '    if (filtroPeriodo === "ult7") return d.audienciaIso <= HOY && d.audienciaIso >= sumarDias(HOY, -7);\n' +
       '    if (filtroPeriodo === "ult30") return d.audienciaIso <= HOY && d.audienciaIso >= sumarDias(HOY, -30);\n' +
       '    return true;\n' +
+      '  }\n' +
+      '  var MESES_CORTOS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];\n' +
+      '  function etiquetaMes(clave) {\n' +
+      '    var p = clave.split("-"); return MESES_CORTOS[+p[1] - 1] + " " + p[0];\n' +
+      '  }\n' +
+      // Línea de tiempo: barras por mes con la cantidad de audiencias de TODO el
+      // conjunto (no del filtrado), para que siempre se vea el panorama completo
+      // aunque haya otros filtros activos. Clic en una barra selecciona ese mes
+      // como período (alterna con "todo" si se hace clic en la ya seleccionada).
+      '  function pintarLineaTiempo() {\n' +
+      '    var porMes = {};\n' +
+      '    DATOS.forEach(function (d) {\n' +
+      '      if (!d.audienciaIso) return;\n' +
+      '      var clave = d.audienciaIso.slice(0, 7);\n' +
+      '      porMes[clave] = (porMes[clave] || 0) + 1;\n' +
+      '    });\n' +
+      '    var claves = Object.keys(porMes).sort();\n' +
+      '    var seleccionado = filtroPeriodo.indexOf("mes:") === 0 ? filtroPeriodo.slice(4) : null;\n' +
+      '    if (!claves.length) { if (graficos.tiempo) { graficos.tiempo.destroy(); graficos.tiempo = null; } return; }\n' +
+      '    grafico("tiempo", "#gLineaTiempo", { type: "bar",\n' +
+      '      data: { labels: claves.map(etiquetaMes), datasets: [{ data: claves.map(function (c) { return porMes[c]; }),\n' +
+      '        backgroundColor: claves.map(function (c) { return c === seleccionado ? COLOR_PENDIENTE : COLOR_AZUL; }),\n' +
+      '        borderRadius: 3 }] },\n' +
+      '      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },\n' +
+      '        plugins: { legend: { display: false } },\n' +
+      '        scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0 }, grid: { display: false } },\n' +
+      '          y: { display: false } },\n' +
+      '        onClick: function (evt, els) {\n' +
+      '          if (!els.length) return;\n' +
+      '          var clave = claves[els[0].index];\n' +
+      '          filtroPeriodo = seleccionado === clave ? "todo" : "mes:" + clave;\n' +
+      '          $$("#periodoGrupo .periodo-boton").forEach(function (b) {\n' +
+      '            b.classList.toggle("activo", b.getAttribute("data-periodo") === filtroPeriodo);\n' +
+      '          });\n' +
+      '          pintar();\n' +
+      '        } } });\n' +
       '  }\n' +
       "  function $(s){ return document.querySelector(s); }\n" +
       "  function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }\n" +
@@ -2308,6 +2355,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '      pendientes: pendientes, faltaInfo: faltaInfo };\n' +
       '  }\n' +
       '  function pintar() {\n' +
+      '    pintarLineaTiempo();\n' +
       '    var base = filtrarBase();\n' +
       '    var r = pintarKpis(base);\n' +
       '    var lista = base.filter(aplicaTipo);\n' +
