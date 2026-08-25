@@ -2156,7 +2156,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div class="tarjeta"><h2>Composición de resultados</h2>' +
       '<p class="pista-clic">Clic en un color del gráfico para filtrar por ese resultado.</p>' +
       '<div class="lienzo"><canvas id="gResultados"></canvas></div></div>' +
-      '<div class="tarjeta"><h2>Materia</h2><div class="lienzo"><canvas id="gMateria"></canvas></div></div>' +
+      '<div class="tarjeta"><h2>Materia</h2>' +
+      '<p class="pista-clic">Clic en un color del gráfico para filtrar por esa materia.</p>' +
+      '<div class="lienzo"><canvas id="gMateria"></canvas></div></div>' +
       '<div class="tarjeta"><h2>Causas por tribunal</h2>' +
       '<p class="pista-clic">Clic en una barra para filtrar por ese tribunal.</p>' +
       '<div class="lienzo"><canvas id="gTribunal"></canvas></div></div>' +
@@ -2315,6 +2317,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    pintar();\n' +
       '    irAlDetalle();\n' +
       '  }\n' +
+      '  function fijarMateria(materia) {\n' +
+      "    $('#fMateria').value = materia;\n" +
+      '    pintar();\n' +
+      '    irAlDetalle();\n' +
+      '  }\n' +
       '  function grafico(clave, id, config) {\n' +
       '    if (graficos[clave]) graficos[clave].destroy();\n' +
       '    var lienzo = $(id);\n' +
@@ -2385,6 +2392,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '      data: { labels: materias, datasets: [{ data: materias.map(function (m) { return porMateria[m]; }),\n' +
       '        backgroundColor: [COLOR_PENDIENTE, COLOR_AZUL, COLOR_NOREALIZADA, COLOR_NEGATIVA, COLOR_POSITIVA] }] },\n' +
       '      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 300 },\n' +
+      '        onClick: function (evt, els) { if (els.length) fijarMateria(materias[els[0].index]); },\n' +
+      '        onHover: function (evt, els) { evt.native.target.style.cursor = els.length ? "pointer" : "default"; },\n' +
       '        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } } } });\n' +
       "    $('#cuerpoTabla').innerHTML = lista.map(function (d) {\n" +
       '      return "<tr><td>" + d.rit + "</td><td>" + (d.nombre || "—") + "</td><td>" + d.calidad +\n' +
