@@ -2070,7 +2070,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       'header{background:var(--navy);color:#fff;border-bottom:3px solid var(--acento);padding:20px 28px}',
       'h1{margin:0;font-size:19px;font-weight:600}',
       '.sub{font-size:12px;color:#A9BDD4;letter-spacing:.05em;text-transform:uppercase;margin-top:4px}',
-      'main{max-width:1200px;margin:0 auto;padding:24px 20px 40px}',
+      'main{max-width:min(1720px,96vw);margin:0 auto;padding:24px 20px 40px}',
       'h2{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--suave);margin:0 0 14px;font-weight:700}',
       '.tarjeta{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:18px 20px;',
       'margin-bottom:16px;box-shadow:0 1px 2px rgba(15,42,74,.05)}',
@@ -2080,15 +2080,24 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       'border-radius:7px;background:#fff;min-width:150px}',
       '.filtros button{font:inherit;font-size:13px;padding:8px 14px;border-radius:7px;border:1px solid var(--borde);',
       'background:#F2F5F9;color:var(--navy);cursor:pointer}',
-      '.rej-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}',
-      '.kpi{border:1px solid var(--borde);border-radius:10px;padding:14px;border-left:3px solid var(--azul)}',
+      '.rej-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}',
+      '.kpi{border:1px solid var(--borde);border-radius:10px;padding:14px;border-left:3px solid var(--azul);',
+      'background:#fff;font:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,border-color .15s}',
+      '.kpi:hover{box-shadow:0 2px 8px rgba(15,42,74,.1)}',
+      '.kpi.activo{border-width:1px 1px 1px 4px;border-color:var(--navy);box-shadow:0 0 0 2px rgba(15,42,74,.12)}',
       '.kpi.verde{border-left-color:var(--verde)}.kpi.ambar{border-left-color:var(--ambar)}',
       '.kpi.gris{border-left-color:var(--gris)}.kpi.acento{border-left-color:var(--acento)}',
       '.kpi.rojo{border-left-color:var(--rojo)}',
       '.kpi-valor{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1}',
       '.kpi-etiqueta{font-size:11.5px;color:var(--suave);margin-top:3px}',
-      '.rej-graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}',
-      '.lienzo{position:relative;height:220px}',
+      '.filtro-tipo-activo{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy);margin-top:12px}',
+      '.filtro-tipo-activo button{font:inherit;border:none;background:var(--navy);color:#fff;border-radius:20px;',
+      'padding:3px 11px;cursor:pointer}',
+      '.rej-graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}',
+      '.grafico-ancho{grid-column:1/-1}',
+      '.lienzo{position:relative;height:240px}',
+      '.lienzo-ancho{height:300px}',
+      '.pista-clic{font-size:11px;color:var(--suave);margin:-8px 0 10px}',
       'table{border-collapse:collapse;width:100%;font-size:13px}',
       'th{background:#F2F5F9;color:var(--navy);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;',
       'text-align:left;padding:9px 12px;border-bottom:1px solid var(--borde);cursor:pointer;user-select:none;',
@@ -2097,10 +2106,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       'td{padding:9px 12px;border-bottom:1px solid #EFF2F6}tr:last-child td{border-bottom:0}',
       '.env{overflow-x:auto}',
       '.chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}',
-      'footer{max-width:1200px;margin:0 auto;padding:20px;color:var(--suave);font-size:12px;',
+      'footer{max-width:min(1720px,96vw);margin:0 auto;padding:20px;color:var(--suave);font-size:12px;',
       'border-top:1px solid var(--borde)}',
       '.contador{font-size:12.5px;color:var(--suave);margin-top:10px}',
-      '@media (max-width:640px){.filtros select,.filtros input{min-width:0;flex:1 1 45%}.lienzo{height:180px}}'
+      '@media (max-width:640px){.filtros select,.filtros input{min-width:0;flex:1 1 45%}.lienzo{height:200px}',
+      '.lienzo-ancho{height:260px}}'
     ].join('');
 
     var html = '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
@@ -2119,12 +2129,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '</div></div>' +
 
       '<div class="tarjeta"><h2>Estado al ' + escapar(fechaCorta(new Date())) + '</h2>' +
-      '<div class="rej-kpi" id="kpis"></div></div>' +
+      '<p class="pista-clic">Clic en una tarjeta para ver esos casos en el detalle de abajo.</p>' +
+      '<div class="rej-kpi" id="kpis"></div><div id="filtroTipoActivo"></div></div>' +
 
       '<div class="rej-graficos">' +
-      '<div class="tarjeta"><h2>Composición de resultados</h2><div class="lienzo"><canvas id="gResultados"></canvas></div></div>' +
-      '<div class="tarjeta"><h2>Causas por tribunal</h2><div class="lienzo"><canvas id="gTribunal"></canvas></div></div>' +
+      '<div class="tarjeta"><h2>Composición de resultados</h2>' +
+      '<p class="pista-clic">Clic en un color del gráfico para filtrar por ese resultado.</p>' +
+      '<div class="lienzo"><canvas id="gResultados"></canvas></div></div>' +
       '<div class="tarjeta"><h2>Materia</h2><div class="lienzo"><canvas id="gMateria"></canvas></div></div>' +
+      '<div class="tarjeta grafico-ancho"><h2>Causas por tribunal</h2>' +
+      '<p class="pista-clic">Clic en una barra para filtrar por ese tribunal.</p>' +
+      '<div class="lienzo lienzo-ancho"><canvas id="gTribunal"></canvas></div></div>' +
       '</div>' +
 
       '<div class="tarjeta"><h2>Detalle de casos</h2><div class="env"><table id="tablaDetalle"><thead><tr>' +
@@ -2160,6 +2175,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       "  var COLOR_POSITIVA='#1E8E5A', COLOR_NEGATIVA='#D97E00', COLOR_NOREALIZADA='#9AA7BC',\n" +
       "    COLOR_PENDIENTE='#D6336C', COLOR_ROJO='#C0392B', COLOR_AZUL='#1D4E7E';\n" +
       '  var graficos = {};\n' +
+      // Filtro por tipo de resultado, activado al hacer clic en un KPI o en un
+      // segmento de "Composición de resultados" — se combina con los filtros
+      // de los selects, pero NO afecta a los propios KPIs (que siempre
+      // muestran el desglose completo, para que se puedan seguir comparando
+      // entre sí y volver a hacer clic en otro).
+      '  var filtroTipo = "";\n' +
+      '  var ETIQUETAS_TIPO = { positiva: "Positiva", negativa: "Negativa",\n' +
+      '    observaciones: "Con observaciones", pendiente: "Pendiente", faltaInfo: "Falta de información" };\n' +
       "  function $(s){ return document.querySelector(s); }\n" +
       "  function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }\n" +
       "  function normalizar(t){ return String(t||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase(); }\n" +
@@ -2175,7 +2198,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    });\n' +
       '  }\n' +
       "  poblarSelect('#fMateria', 'materia'); poblarSelect('#fTribunal', 'tribunal'); poblarSelect('#fEstado', 'estado');\n" +
-      '  function filtrar() {\n' +
+      '  function filtrarBase() {\n' +
       "    var materia = $('#fMateria').value, tribunal = $('#fTribunal').value, estado = $('#fEstado').value;\n" +
       "    var texto = normalizar($('#fTexto').value);\n" +
       '    return DATOS.filter(function (d) {\n' +
@@ -2186,6 +2209,27 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '      return true;\n' +
       '    });\n' +
       '  }\n' +
+      '  function aplicaTipo(d) {\n' +
+      '    if (filtroTipo === "positiva") return d.resultadoCrudo === "Positiva";\n' +
+      '    if (filtroTipo === "negativa") return d.resultadoCrudo === "Negativa";\n' +
+      '    if (filtroTipo === "observaciones") return d.resultadoCrudo === "No realizada";\n' +
+      '    if (filtroTipo === "pendiente") return d.pendiente;\n' +
+      '    if (filtroTipo === "faltaInfo") return d.faltaInformacion;\n' +
+      '    return true;\n' +
+      '  }\n' +
+      '  function irAlDetalle() {\n' +
+      '    var t = $("#tablaDetalle"); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });\n' +
+      '  }\n' +
+      '  function fijarTipo(tipo) {\n' +
+      '    filtroTipo = filtroTipo === tipo ? "" : tipo;\n' +
+      '    pintar();\n' +
+      '    if (filtroTipo) irAlDetalle();\n' +
+      '  }\n' +
+      '  function fijarTribunal(tribunal) {\n' +
+      "    $('#fTribunal').value = tribunal;\n" +
+      '    pintar();\n' +
+      '    irAlDetalle();\n' +
+      '  }\n' +
       '  function grafico(clave, id, config) {\n' +
       '    if (graficos[clave]) graficos[clave].destroy();\n' +
       '    var lienzo = $(id);\n' +
@@ -2194,31 +2238,42 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '  function opcionesBarra(cfg) {\n' +
       '    cfg = cfg || {};\n' +
       '    return { responsive: true, maintainAspectRatio: false, indexAxis: cfg.horizontal ? "y" : "x",\n' +
-      '      animation: { duration: 300 },\n' +
+      '      animation: { duration: 300 }, onClick: cfg.onClick,\n' +
+      '      onHover: cfg.onClick ? function (evt, els) { evt.native.target.style.cursor = els.length ? "pointer" : "default"; } : undefined,\n' +
       '      plugins: { legend: { display: !!cfg.leyenda, position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } },\n' +
-      '      scales: { x: { stacked: !!cfg.apilado, display: !cfg.ocultarX }, y: { stacked: !!cfg.apilado, display: !cfg.ocultarY } } };\n' +
+      '      scales: { x: { stacked: !!cfg.apilado, display: !cfg.ocultarX },\n' +
+      '        y: { stacked: !!cfg.apilado, display: !cfg.ocultarY, ticks: { autoSkip: false } } } };\n' +
       '  }\n' +
-      '  function pintarKpis(lista) {\n' +
-      '    var positivas = lista.filter(function (d) { return d.resultadoCrudo === "Positiva"; }).length;\n' +
-      '    var negativas = lista.filter(function (d) { return d.resultadoCrudo === "Negativa"; }).length;\n' +
-      '    var observaciones = lista.filter(function (d) { return d.resultadoCrudo === "No realizada"; }).length;\n' +
-      '    var pendientes = lista.filter(function (d) { return d.pendiente; }).length;\n' +
-      '    var faltaInfo = lista.filter(function (d) { return d.faltaInformacion; }).length;\n' +
+      '  function pintarKpis(base) {\n' +
+      '    var positivas = base.filter(function (d) { return d.resultadoCrudo === "Positiva"; }).length;\n' +
+      '    var negativas = base.filter(function (d) { return d.resultadoCrudo === "Negativa"; }).length;\n' +
+      '    var observaciones = base.filter(function (d) { return d.resultadoCrudo === "No realizada"; }).length;\n' +
+      '    var pendientes = base.filter(function (d) { return d.pendiente; }).length;\n' +
+      '    var faltaInfo = base.filter(function (d) { return d.faltaInformacion; }).length;\n' +
       '    var tarjetas = [\n' +
-      '      { v: lista.length, e: "Casos", c: "" }, { v: positivas, e: "Positivas", c: "verde" },\n' +
-      '      { v: negativas, e: "Negativas", c: "ambar" }, { v: observaciones, e: "Con observaciones", c: "gris" },\n' +
-      '      { v: pendientes, e: "Pendientes", c: "acento" }, { v: faltaInfo, e: "Falta de información", c: "rojo" }\n' +
+      '      { v: base.length, e: "Casos", c: "", tipo: "" }, { v: positivas, e: "Positivas", c: "verde", tipo: "positiva" },\n' +
+      '      { v: negativas, e: "Negativas", c: "ambar", tipo: "negativa" },\n' +
+      '      { v: observaciones, e: "Con observaciones", c: "gris", tipo: "observaciones" },\n' +
+      '      { v: pendientes, e: "Pendientes", c: "acento", tipo: "pendiente" },\n' +
+      '      { v: faltaInfo, e: "Falta de información", c: "rojo", tipo: "faltaInfo" }\n' +
       '    ];\n' +
       "    $('#kpis').innerHTML = tarjetas.map(function (k) {\n" +
-      '      return "<div class=\\"kpi " + k.c + "\\"><div class=\\"kpi-valor\\">" + k.v +\n' +
-      '        "</div><div class=\\"kpi-etiqueta\\">" + k.e + "</div></div>";\n' +
+      '      var activo = k.tipo && k.tipo === filtroTipo ? " activo" : "";\n' +
+      '      return "<button type=\\"button\\" class=\\"kpi " + k.c + activo + "\\" data-tipo=\\"" + k.tipo + "\\">" +\n' +
+      '        "<div class=\\"kpi-valor\\">" + k.v + "</div><div class=\\"kpi-etiqueta\\">" + k.e + "</div></button>";\n' +
       '    }).join("");\n' +
+      "    $('#filtroTipoActivo').innerHTML = filtroTipo\n" +
+      '      ? "<div class=\\"filtro-tipo-activo\\">Filtrando por: " + ETIQUETAS_TIPO[filtroTipo] +\n' +
+      '        " <button type=\\"button\\" id=\\"btnQuitarTipo\\">Quitar ×</button></div>" : "";\n' +
+      "    if ($('#btnQuitarTipo')) $('#btnQuitarTipo').addEventListener('click', function () { fijarTipo(filtroTipo); });\n" +
       '    return { positivas: positivas, negativas: negativas, observaciones: observaciones,\n' +
       '      pendientes: pendientes, faltaInfo: faltaInfo };\n' +
       '  }\n' +
       '  function pintar() {\n' +
-      '    var lista = filtrar();\n' +
-      '    var r = pintarKpis(lista);\n' +
+      '    var base = filtrarBase();\n' +
+      '    var r = pintarKpis(base);\n' +
+      '    var lista = base.filter(aplicaTipo);\n' +
+      '    var TIPOS_SEGMENTO = ["positiva", "negativa", "observaciones", "pendiente", "faltaInfo"];\n' +
       '    grafico("resultados", "#gResultados", { type: "bar",\n' +
       '      data: { labels: ["Resultado"], datasets: [\n' +
       '        { label: "Positiva", data: [r.positivas], backgroundColor: COLOR_POSITIVA },\n' +
@@ -2227,14 +2282,16 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '        { label: "Pendiente", data: [r.pendientes], backgroundColor: COLOR_PENDIENTE },\n' +
       '        { label: "Falta de información", data: [r.faltaInfo], backgroundColor: COLOR_ROJO }\n' +
       '      ] },\n' +
-      '      options: opcionesBarra({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true }) });\n' +
+      '      options: opcionesBarra({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true,\n' +
+      '        onClick: function (evt, els) { if (els.length) fijarTipo(TIPOS_SEGMENTO[els[0].datasetIndex]); } }) });\n' +
       '    var porTribunal = {};\n' +
       '    lista.forEach(function (d) { porTribunal[d.tribunal] = (porTribunal[d.tribunal] || 0) + 1; });\n' +
       '    var tribunales = Object.keys(porTribunal).sort(function (a, b) { return porTribunal[b] - porTribunal[a]; });\n' +
       '    grafico("tribunal", "#gTribunal", { type: "bar",\n' +
       '      data: { labels: tribunales, datasets: [{ label: "Causas",\n' +
       '        data: tribunales.map(function (t) { return porTribunal[t]; }), backgroundColor: COLOR_AZUL }] },\n' +
-      '      options: opcionesBarra({ horizontal: true }) });\n' +
+      '      options: opcionesBarra({ horizontal: true,\n' +
+      '        onClick: function (evt, els) { if (els.length) fijarTribunal(tribunales[els[0].index]); } }) });\n' +
       '    var porMateria = {};\n' +
       '    lista.forEach(function (d) { porMateria[d.materia] = (porMateria[d.materia] || 0) + 1; });\n' +
       '    var materias = Object.keys(porMateria);\n' +
@@ -2251,10 +2308,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    }).join("") || "<tr><td colspan=\\"10\\" style=\\"text-align:center;color:#5B6478\\">Ningún caso coincide con el filtro.</td></tr>";\n' +
       "    $('#contador').textContent = lista.length + ' de ' + DATOS.length + ' causa(s).';\n" +
       '  }\n' +
+      "  $('#kpis').addEventListener('click', function (e) {\n" +
+      '    var boton = e.target.closest("[data-tipo]"); if (!boton) return;\n' +
+      '    var tipo = boton.getAttribute("data-tipo");\n' +
+      '    if (!tipo) { filtroTipo = ""; pintar(); return; }\n' +
+      '    fijarTipo(tipo);\n' +
+      '  });\n' +
       '  ["#fMateria", "#fTribunal", "#fEstado"].forEach(function (id) { $(id).addEventListener("change", pintar); });\n' +
       "  $('#fTexto').addEventListener('input', pintar);\n" +
       "  $('#btnLimpiar').addEventListener('click', function () {\n" +
       "    $('#fMateria').value = ''; $('#fTribunal').value = ''; $('#fEstado').value = ''; $('#fTexto').value = '';\n" +
+      '    filtroTipo = "";\n' +
       '    pintar();\n' +
       '  });\n' +
       '  var orden = { campo: null, asc: true };\n' +
