@@ -338,8 +338,12 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
 .celda-rit { font-weight: 600; color: var(--azul-profundo); white-space: nowrap; }
 .celda-corta { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .celda-tribunal { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.celda-telefono { white-space: nowrap; }
 .tabla-control { font-size: 12.5px; }
 .tabla-control td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabla-control td.celda-corta { max-width: 260px; }
+.tabla-control td.celda-tribunal { max-width: 340px; }
+.tabla-control td.celda-rit { max-width: none; }
 
 /* ---------- Zona de carga ---------- */
 .zona-carga {
@@ -2639,6 +2643,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   var todasColumnasControl = false;
   var COLUMNAS_RESUMEN_CONTROL = [4, 9, 8, 12, 5, 11, 2, 22];
 
+  function claseCeldaControl(indice) {
+    if (indice === 4) return 'celda-rit';
+    if (indice === 9) return 'celda-corta';
+    if (indice === 12) return 'celda-tribunal';
+    return '';
+  }
+
   function ordenarListaCasos(lista) {
     if (!ordenListaCasos.campo) return ordenarPorPrioridad(lista);
     var campo = ordenListaCasos.campo, asc = ordenListaCasos.asc;
@@ -2681,12 +2692,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         '<td>' + escapar(caso.materia) + '</td>' +
         '<td class="celda-tribunal" title="' + escapar(caso.tribunal) + '">' + escapar(caso.tribunal) + '</td>' +
         '<td>' + escapar(fechaCorta(caso.fechaAudiencia) || '—') + '</td>' +
-        '<td>' + escapar(caso.telefono || '—') + '</td>' +
+        '<td class="celda-telefono">' + escapar(caso.telefono || '—') + '</td>' +
         '<td><span class="chip ' + claseChip(caso.estado) + '">' + escapar(caso.estado) + '</span>' +
           (faltan.length && caso.estado === ESTADOS.RECIBIDO
             ? '<div style="font-size:11.5px;color:var(--texto-suave);margin-top:2px">Faltan ' + faltan.length + ' dato(s)</div>' : '') +
+          (alertas ? '<div style="margin-top:2px"><span class="chip chip-alerta chip-simple">' + alertas + ' aviso(s)</span></div>' : '') +
         '</td>' +
-        '<td>' + (alertas ? '<span class="chip chip-alerta chip-simple">' + alertas + ' aviso(s)</span>' : '') + '</td>' +
         (variosFuncionarios ? '<td>' + escapar(caso.propietario || '—') +
           (caso.propietario === identificador() ? '<div style="font-size:11.5px;color:var(--texto-suave)">usted</div>' : '') + '</td>' : '') +
         '</tr>';
@@ -2700,7 +2711,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<th>RIT</th><th>Requerido</th><th>Materia</th>' +
       '<th class="columna-ordenable" data-campo="tribunal">Tribunal' + flechaOrden('tribunal') + '</th>' +
       '<th class="columna-ordenable" data-campo="fechaAudiencia">Fecha de audiencia' + flechaOrden('fechaAudiencia') + '</th>' +
-      '<th>Teléfono</th><th>Estado</th><th>Avisos</th>' + (variosFuncionarios ? '<th>Funcionario</th>' : '') +
+      '<th>Teléfono</th><th>Estado</th>' + (variosFuncionarios ? '<th>Funcionario</th>' : '') +
       '</tr></thead><tbody>' + filas + '</tbody></table></div>' +
       '<p class="campo-ayuda" style="margin-top:var(--e2)">' + lista.length + ' de ' + almacen.casos.length +
       ' caso(s). Haga clic en una fila para abrir la ficha.</p>';
@@ -3550,7 +3561,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         (casosTabla.length ? casosTabla.map(function (caso) {
           var fila = filaControl(caso);
           return '<tr>' + indices.map(function (i) {
-            return '<td title="' + escapar(fila[i]) + '">' + escapar(fila[i]) + '</td>';
+            return '<td class="' + claseCeldaControl(i) + '" title="' + escapar(fila[i]) + '">' +
+              escapar(fila[i]) + '</td>';
           }).join('') + '</tr>';
         }).join('') : '<tr><td colspan="' + indices.length +
           '" style="text-align:center;color:var(--texto-suave)">Ningún caso coincide con el filtro.</td></tr>') +
