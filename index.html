@@ -807,7 +807,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
     </div>
 
     <div class="tarjeta">
-      <div class="tarjeta-titulo">Vista de control (26 columnas)</div>
+      <div class="tarjeta-titulo" id="tituloVistaControl">Vista de control (resumida)</div>
       <input class="buscador" type="search" id="buscadorControl"
         placeholder="Buscar por RIT, nombre o tribunal…" style="margin-bottom:var(--e3)">
       <div style="display:flex; gap:var(--e2); flex-wrap:wrap; margin-bottom:var(--e3)">
@@ -3538,6 +3538,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         escapar(s.estado) + ' · ' + (cuenta[s.estado] || 0) + '</span>';
     }).join('');
 
+    $('#tituloVistaControl').textContent = 'Vista de control (' +
+      (todasColumnasControl ? '26 columnas completas' : 'resumida') + ')';
     var contenedor = $('#tablaControl');
     if (!total) { contenedor.innerHTML = bloqueVacio('Sin casos cargados.'); }
     else {
