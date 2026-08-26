@@ -1991,7 +1991,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var iniciales = almacen.configuracion.iniciales || '';
     var telefono = analizarTelefono(caso.telefono);
     var realizada = !!(caso.resultado || caso.fechaNotificacion);
-    var estadoNotificacion = caso.resultado === 'No realizada' ? 'No realizada' :
+    var estadoNotificacion = caso.duplicado && !caso.resultado ? 'Duplicado' :
+      caso.resultado === 'No realizada' ? 'No realizada' :
       realizada ? 'Realizada' : 'Pendiente';
     return [
       caso.correlativo,
@@ -2089,8 +2090,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         run: enmascararRun(c.run) || '',
         telefono: enmascararTelefono(c.telefono) || '', estado: c.estado || '',
         resultado: etiquetaResultado(c.resultado), resultadoCrudo: c.resultado || '',
-        pendiente: c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado,
-        faltaInformacion: c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado
+        // Mismo criterio "blindado" que en la plataforma: duplicado tiene prioridad
+        // sobre pendiente/falta de información — las tres son mutuamente excluyentes.
+        duplicado: !!(c.duplicado && !c.resultado),
+        pendiente: !c.duplicado && c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado,
+        faltaInformacion: !c.duplicado && c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado
       };
     });
 
@@ -2100,7 +2104,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     var estilos = [
       ':root{--navy:#0F2A4A;--acento:#D6336C;--verde:#1E8E5A;--ambar:#D97E00;--gris:#9AA7BC;',
-      '--rojo:#C0392B;--azul:#1D4E7E;--suave:#5B6478;--borde:#E2E6ED}',
+      '--rojo:#C0392B;--purpura:#7C4DA8;--azul:#1D4E7E;--suave:#5B6478;--borde:#E2E6ED}',
       '*{box-sizing:border-box}',
       'body{margin:0;background:#F7F8FA;color:#1A1F2E;font-family:"Segoe UI",Roboto,Arial,sans-serif;',
       'font-size:15px;line-height:1.6}',
@@ -2125,6 +2129,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '.kpi.verde{border-left-color:var(--verde)}.kpi.ambar{border-left-color:var(--ambar)}',
       '.kpi.gris{border-left-color:var(--gris)}.kpi.acento{border-left-color:var(--acento)}',
       '.kpi.rojo{border-left-color:var(--rojo)}',
+      '.kpi.purpura{border-left-color:var(--purpura)}',
       '.kpi-valor{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1}',
       '.kpi-etiqueta{font-size:11.5px;color:var(--suave);margin-top:3px}',
       '.filtro-tipo-activo{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy);margin-top:12px}',
@@ -2231,7 +2236,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return 'var DATOS = ' + datosJson + ';\n' +
       '(function () {\n' +
       "  var COLOR_POSITIVA='#1E8E5A', COLOR_NEGATIVA='#D97E00', COLOR_NOREALIZADA='#9AA7BC',\n" +
-      "    COLOR_PENDIENTE='#D6336C', COLOR_ROJO='#C0392B', COLOR_AZUL='#1D4E7E';\n" +
+      "    COLOR_PENDIENTE='#D6336C', COLOR_ROJO='#C0392B', COLOR_AZUL='#1D4E7E', COLOR_PURPURA='#7C4DA8';\n" +
       '  var graficos = {};\n' +
       // Filtro por tipo de resultado, activado al hacer clic en un KPI o en un
       // segmento de "Composición de resultados" — se combina con los filtros
@@ -2241,7 +2246,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '  var filtroTipo = "";\n' +
       '  var filtroPeriodo = "todo";\n' +
       '  var ETIQUETAS_TIPO = { positiva: "Positiva", negativa: "Negativa",\n' +
-      '    observaciones: "Con observaciones", pendiente: "Pendiente", faltaInfo: "Falta de información" };\n' +
+      '    observaciones: "Con observaciones", pendiente: "Pendiente", faltaInfo: "Falta de información",\n' +
+      '    duplicado: "Duplicadas / No gestionadas" };\n' +
       // Período móvil: ventanas relativas a HOY (la fecha real de quien abre el
       // informe, no la de cuando se generó), sobre la fecha de audiencia. Las
       // fechas ISO (aaaa-mm-dd) se pueden comparar como texto sin parsear.
@@ -2338,6 +2344,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    if (filtroTipo === "observaciones") return d.resultadoCrudo === "No realizada";\n' +
       '    if (filtroTipo === "pendiente") return d.pendiente;\n' +
       '    if (filtroTipo === "faltaInfo") return d.faltaInformacion;\n' +
+      '    if (filtroTipo === "duplicado") return d.duplicado;\n' +
       '    return true;\n' +
       '  }\n' +
       '  function irAlDetalle() {\n' +
@@ -2378,12 +2385,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '    var observaciones = base.filter(function (d) { return d.resultadoCrudo === "No realizada"; }).length;\n' +
       '    var pendientes = base.filter(function (d) { return d.pendiente; }).length;\n' +
       '    var faltaInfo = base.filter(function (d) { return d.faltaInformacion; }).length;\n' +
+      '    var duplicadas = base.filter(function (d) { return d.duplicado; }).length;\n' +
       '    var tarjetas = [\n' +
       '      { v: base.length, e: "Casos", c: "", tipo: "" }, { v: positivas, e: "Positivas", c: "verde", tipo: "positiva" },\n' +
       '      { v: negativas, e: "Negativas", c: "ambar", tipo: "negativa" },\n' +
       '      { v: observaciones, e: "Con observaciones", c: "gris", tipo: "observaciones" },\n' +
       '      { v: pendientes, e: "Pendientes", c: "acento", tipo: "pendiente" },\n' +
-      '      { v: faltaInfo, e: "Falta de información", c: "rojo", tipo: "faltaInfo" }\n' +
+      '      { v: faltaInfo, e: "Falta de información", c: "rojo", tipo: "faltaInfo" },\n' +
+      '      { v: duplicadas, e: "Duplicadas / No gestionadas", c: "purpura", tipo: "duplicado" }\n' +
       '    ];\n' +
       "    $('#kpis').innerHTML = tarjetas.map(function (k) {\n" +
       '      var activo = k.tipo && k.tipo === filtroTipo ? " activo" : "";\n' +
@@ -2395,21 +2404,22 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '        " <button type=\\"button\\" id=\\"btnQuitarTipo\\">Quitar ×</button></div>" : "";\n' +
       "    if ($('#btnQuitarTipo')) $('#btnQuitarTipo').addEventListener('click', function () { fijarTipo(filtroTipo); });\n" +
       '    return { positivas: positivas, negativas: negativas, observaciones: observaciones,\n' +
-      '      pendientes: pendientes, faltaInfo: faltaInfo };\n' +
+      '      pendientes: pendientes, faltaInfo: faltaInfo, duplicadas: duplicadas };\n' +
       '  }\n' +
       '  function pintar() {\n' +
       '    pintarLineaTiempo();\n' +
       '    var base = filtrarBase();\n' +
       '    var r = pintarKpis(base);\n' +
       '    var lista = base.filter(aplicaTipo);\n' +
-      '    var TIPOS_SEGMENTO = ["positiva", "negativa", "observaciones", "pendiente", "faltaInfo"];\n' +
+      '    var TIPOS_SEGMENTO = ["positiva", "negativa", "observaciones", "pendiente", "faltaInfo", "duplicado"];\n' +
       '    grafico("resultados", "#gResultados", { type: "bar",\n' +
       '      data: { labels: ["Resultado"], datasets: [\n' +
       '        { label: "Positiva", data: [r.positivas], backgroundColor: COLOR_POSITIVA },\n' +
       '        { label: "Negativa", data: [r.negativas], backgroundColor: COLOR_NEGATIVA },\n' +
       '        { label: "Con observaciones", data: [r.observaciones], backgroundColor: COLOR_NOREALIZADA },\n' +
       '        { label: "Pendiente", data: [r.pendientes], backgroundColor: COLOR_PENDIENTE },\n' +
-      '        { label: "Falta de información", data: [r.faltaInfo], backgroundColor: COLOR_ROJO }\n' +
+      '        { label: "Falta de información", data: [r.faltaInfo], backgroundColor: COLOR_ROJO },\n' +
+      '        { label: "Duplicadas / No gestionadas", data: [r.duplicadas], backgroundColor: COLOR_PURPURA }\n' +
       '      ] },\n' +
       '      options: opcionesBarra({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true,\n' +
       '        onClick: function (evt, els) { if (els.length) fijarTipo(TIPOS_SEGMENTO[els[0].datasetIndex]); } }) });\n' +
