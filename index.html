@@ -334,6 +334,7 @@ table.tabla th.columna-ordenable { cursor: pointer; user-select: none; }
 table.tabla th.columna-ordenable:hover { color: var(--acento); }
 .celda-rit { font-weight: 600; color: var(--azul-profundo); white-space: nowrap; }
 .celda-corta { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.celda-tribunal { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabla-control { font-size: 12.5px; }
 .tabla-control td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2627,6 +2628,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // resolución). "Limpiar filtros" también repone este orden a su estado inicial.
   var ordenListaCasos = { campo: null, asc: true };
 
+  // Vista en pantalla de "Control y reportabilidad": por defecto muestra sólo un
+  // subconjunto legible de columnas (sin scroll horizontal, mismo criterio que el
+  // informe para jefatura), con un botón para ver las 26 columnas completas cuando
+  // haga falta. Las exportaciones (.xlsx/.csv) siempre incluyen las 26, sin importar
+  // este estado — esto es puramente cómo se ve en pantalla.
+  var todasColumnasControl = false;
+  var COLUMNAS_RESUMEN_CONTROL = [4, 9, 8, 12, 5, 11, 2, 22];
+
   function ordenarListaCasos(lista) {
     if (!ordenListaCasos.campo) return ordenarPorPrioridad(lista);
     var campo = ordenListaCasos.campo, asc = ordenListaCasos.asc;
@@ -2667,7 +2676,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         '<td class="celda-corta">' + escapar(caso.nombre || '—') +
           '<div style="font-size:11.5px;color:var(--texto-suave)">' + escapar(caso.tipoParticipante) + '</div></td>' +
         '<td>' + escapar(caso.materia) + '</td>' +
-        '<td class="celda-corta">' + escapar(caso.tribunal) + '</td>' +
+        '<td class="celda-tribunal" title="' + escapar(caso.tribunal) + '">' + escapar(caso.tribunal) + '</td>' +
         '<td>' + escapar(fechaCorta(caso.fechaAudiencia) || '—') + '</td>' +
         '<td>' + escapar(caso.telefono || '—') + '</td>' +
         '<td><span class="chip ' + claseChip(caso.estado) + '">' + escapar(caso.estado) + '</span>' +
@@ -3523,18 +3532,30 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       var aviso = casosTabla.length !== total
         ? '<p class="campo-ayuda">Mostrando ' + casosTabla.length + ' de ' + total +
           ' casos según el filtro aplicado. La exportación siempre incluye todos los casos.</p>' : '';
-      contenedor.innerHTML = aviso + '<div class="tabla-envoltorio" style="max-height:460px;overflow:auto">' +
+      var indices = todasColumnasControl
+        ? encabezados.map(function (h, i) { return i; })
+        : COLUMNAS_RESUMEN_CONTROL;
+      contenedor.innerHTML = aviso +
+        '<button class="boton boton-secundario boton-pequeno" type="button" id="btnAlternarColumnasControl" ' +
+        'style="margin-bottom:var(--e2)">' +
+        (todasColumnasControl ? 'Ver vista resumida' : 'Ver las 26 columnas completas') + '</button>' +
+        '<div class="tabla-envoltorio" style="max-height:460px;overflow:auto">' +
         '<table class="tabla tabla-control"><thead><tr>' +
-        encabezados.map(function (h, i) {
-          return '<th title="' + escapar(h) + '">' + escapar(i === 3 ? 'Combinación' : h) + '</th>';
+        indices.map(function (i) {
+          return '<th title="' + escapar(encabezados[i]) + '">' + escapar(i === 3 ? 'Combinación' : encabezados[i]) + '</th>';
         }).join('') + '</tr></thead><tbody>' +
         (casosTabla.length ? casosTabla.map(function (caso) {
-          return '<tr>' + filaControl(caso).map(function (celda) {
-            return '<td title="' + escapar(celda) + '">' + escapar(celda) + '</td>';
+          var fila = filaControl(caso);
+          return '<tr>' + indices.map(function (i) {
+            return '<td title="' + escapar(fila[i]) + '">' + escapar(fila[i]) + '</td>';
           }).join('') + '</tr>';
-        }).join('') : '<tr><td colspan="' + encabezados.length +
+        }).join('') : '<tr><td colspan="' + indices.length +
           '" style="text-align:center;color:var(--texto-suave)">Ningún caso coincide con el filtro.</td></tr>') +
         '</tbody></table></div>';
+      $('#btnAlternarColumnasControl').addEventListener('click', function () {
+        todasColumnasControl = !todasColumnasControl;
+        pintarControl();
+      });
     }
 
     $('#tablaTribunales').innerHTML = '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
