@@ -33,6 +33,7 @@
   --verde: #1E8E5A;
   --ambar: #D97E00;
   --rojo: #C0392B;
+  --purpura: #7C4DA8;
   --e1: 4px;  --e2: 8px;  --e3: 16px;  --e4: 24px;  --e5: 32px;
   --radio: 10px;
   --sombra: 0 1px 2px rgba(15,42,74,.06), 0 4px 16px rgba(15,42,74,.05);
@@ -166,7 +167,7 @@ a { color: var(--azul-medio); }
 
 .rejilla { display: grid; gap: var(--e3); }
 .rejilla-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.rejilla-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.rejilla-4 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 
 /* ---------- Botones ---------- */
 .boton {
@@ -237,6 +238,7 @@ a { color: var(--azul-medio); }
 .indicador.rojo { border-left-color: var(--rojo); }
 .indicador.acento { border-left-color: var(--acento); }
 .indicador.gris { border-left-color: var(--texto-suave); }
+.indicador.purpura { border-left-color: var(--purpura); }
 .indicador.clicable {
   cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit;
   transition: transform var(--transicion), box-shadow var(--transicion), border-color var(--transicion);
@@ -266,6 +268,7 @@ a { color: var(--azul-medio); }
 .kpi.ambar { border-left-color: var(--ambar); }
 .kpi.rojo { border-left-color: var(--rojo); }
 .kpi.acento { border-left-color: var(--acento); }
+.kpi.purpura { border-left-color: var(--purpura); }
 .kpi-valor { font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; color: var(--azul-profundo); }
 .kpi-etiqueta { font-size: 12.5px; font-weight: 600; color: var(--texto-suave); margin-top: 4px; }
 .kpi-lectura { font-size: 12px; color: var(--texto-suave); margin-top: 6px; line-height: 1.45; }
@@ -310,6 +313,7 @@ a { color: var(--azul-medio); }
 .chip-nonotificable { background: #FBECEA; color: var(--rojo); }
 .chip-simple::before { display: none; }
 .chip-alerta { background: #FDF3E3; color: var(--ambar); }
+.chip-duplicado { background: #F1E8F7; color: var(--purpura); }
 
 /* ---------- Tablas ---------- */
 .tabla-envoltorio { overflow-x: auto; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
@@ -324,6 +328,10 @@ table.tabla td { padding: 11px var(--e3); border-bottom: 1px solid #EFF2F6; vert
 table.tabla tbody tr { transition: background var(--transicion); }
 table.tabla tbody tr:hover { background: #FAFBFD; }
 table.tabla tbody tr:last-child td { border-bottom: 0; }
+table.tabla tbody tr.fila-duplicada { background: #FBF7FD; }
+table.tabla tbody tr.fila-duplicada:hover { background: #F5EDFA; }
+table.tabla th.columna-ordenable { cursor: pointer; user-select: none; }
+table.tabla th.columna-ordenable:hover { color: var(--acento); }
 .celda-rit { font-weight: 600; color: var(--azul-profundo); white-space: nowrap; }
 .celda-corta { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabla-control { font-size: 12.5px; }
@@ -421,6 +429,11 @@ table.tabla tbody tr:last-child td { border-bottom: 0; }
 .panel-generar-nodisponible {
   font-size: 13px; color: var(--texto-suave); padding: var(--e2) 0;
 }
+.panel-generar-alterno {
+  display: flex; align-items: center; gap: var(--e2); flex-wrap: wrap;
+  margin-top: var(--e3); padding-top: var(--e3); border-top: 1px dashed var(--borde);
+}
+.panel-generar-alterno .campo-ayuda { margin: 0; }
 
 /* ---------- Lista de documentos ---------- */
 .lista-documentos {
@@ -1298,7 +1311,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function recalcularEstado(caso) {
-    if (!String(caso.nombre || '').trim() || analizarTelefono(caso.telefono).bloqueaWhatsapp) {
+    // "resolucionNoOrdenaWhatsapp" es una decisión manual del notificador (revisó
+    // la resolución real) — se respeta siempre, sin importar si el teléfono o el
+    // nombre lucen válidos.
+    if (caso.resolucionNoOrdenaWhatsapp || !String(caso.nombre || '').trim() ||
+        analizarTelefono(caso.telefono).bloqueaWhatsapp) {
       caso.estado = ESTADOS.NO_NOTIFICABLE;
       return caso.estado;
     }
@@ -1608,8 +1625,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       throw new Error('El archivo no tiene las columnas mínimas (RIT y Nombre participante).');
     }
 
+    // Identifica esta carga puntual (no el archivo por nombre, que podría
+    // repetirse) para poder deshacerla completa más adelante si corresponde.
+    var cargaId = idUnico();
     var resumen = {
-      archivo: nombreArchivo, fecha: new Date().toISOString(),
+      archivo: nombreArchivo, fecha: new Date().toISOString(), cargaId: cargaId,
       nuevos: 0, duplicados: 0, noNotificables: 0, conAvisos: 0, filas: 0, detalles: []
     };
     var indice = {};
@@ -1640,17 +1660,33 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         run: '', horaAudiencia: '', tipoAudiencia: '', citeseNotifiquese: '',
         apercibimiento: '', documentos: '', documentosLista: [],
         fechaNotificacion: '', horaNotificacion: '', certificacion: '', resultado: '', notas: '',
-        motivoNoNotificable: '',
+        motivoNoNotificable: '', resolucionNoOrdenaWhatsapp: false, duplicado: false,
         materia: '', domicilioTribunal: '', confianzaDomicilio: '',
         documentosGenerados: [],
-        origen: nombreArchivo,
+        origen: nombreArchivo, cargaId: cargaId,
         fechaIngreso: aIso(new Date()),
         propietario: identificador(),
         modificadoEn: new Date().toISOString()
       };
 
+      // A pedido de JC (24-08-2026): un RIT+correlativo que ya existe ya NO se salta —
+      // se carga siempre, como un caso nuevo aparte, pero marcado "duplicado" para que
+      // el funcionario decida si es un duplicado real o una diligencia nueva legítima
+      // para la misma causa. Se le da un correlativo sintético (mismo patrón que ya se
+      // usó en la importación histórica) para no pisar la fila original al sincronizar
+      // con la planilla compartida, que usa RIT+correlativo como llave de actualización.
       var clave = claveCaso(caso);
-      if (indice[clave]) { resumen.duplicados++; continue; }
+      if (indice[clave]) {
+        resumen.duplicados++;
+        caso.duplicado = true;
+        caso.correlativo = caso.correlativo + '-dup' + resumen.duplicados;
+        clave = claveCaso(caso);
+        resumen.detalles.push({ rit: caso.rit, tipo: 'alerta',
+          texto: 'Coincide con una causa ya cargada (mismo RIT y correlativo): revisar si es un ' +
+            'duplicado real o una diligencia nueva.' });
+      } else {
+        caso.duplicado = false;
+      }
 
       caso.materia = clasificarMateria(caso.rit, caso.tribunal);
       var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
@@ -1663,7 +1699,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       else if (telefono.avisos.length) resumen.conAvisos++;
       if (nombreDudoso(caso.nombre)) {
         resumen.detalles.push({ rit: caso.rit, tipo: 'alerta',
-          texto: 'Participante no individualizado en la resolución' });
+          texto: 'Requerido no individualizado en la resolución' });
       }
       telefono.avisos.forEach(function (aviso) {
         if (caso.estado !== ESTADOS.NO_NOTIFICABLE) {
@@ -2165,7 +2201,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '</div>' +
 
       '<div class="tarjeta"><h2>Detalle de casos</h2><div class="env"><table id="tablaDetalle"><thead><tr>' +
-      '<th data-campo="rit">RIT</th><th data-campo="nombre">Participante</th><th data-campo="calidad">Calidad</th>' +
+      '<th data-campo="rit">RIT</th><th data-campo="nombre">Requerido</th><th data-campo="calidad">Calidad</th>' +
       '<th data-campo="materia">Materia</th><th data-campo="tribunal">Tribunal</th><th data-campo="audiencia">Audiencia</th>' +
       '<th data-campo="run">RUN</th><th data-campo="telefono">Teléfono</th><th data-campo="estado">Estado</th>' +
       '<th data-campo="resultado">Resultado</th></tr></thead><tbody id="cuerpoTabla"></tbody></table></div>' +
@@ -2446,7 +2482,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   // 'resultado' filtra por el resultado de la diligencia; 'sinResultado' es el indicador
   // "Pendientes": notificable y todavía sin Positiva ni Negativa registrada.
-  var filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
+  var filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, duplicado: false, materia: '', tribunal: '' };
   var casoAbierto = null;
 
   function claseChip(estado) {
@@ -2460,13 +2496,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       if (filtros.estado && caso.estado !== filtros.estado) return false;
       if (filtros.resultado && caso.resultado !== filtros.resultado) return false;
       // "Pendientes" son las que se pueden diligenciar ya mismo; las que tienen
-      // teléfono/nombre inválido quedan aparte en "Diligencias con falta de información"
-      // — entre las dos listas suman todo lo que está sin resultado en la planilla.
-      if (filtros.sinResultado && (caso.resultado || caso.estado === ESTADOS.NO_NOTIFICABLE)) return false;
-      // "Diligencias con falta de información": sin resultado Y con teléfono/nombre inválido.
-      // Apenas se certifica (queda con un resultado), sale de esta lista y pasa a contarse
-      // sólo en su resultado — así nunca se cuenta una causa dos veces.
-      if (filtros.faltaInformacion && (caso.estado !== ESTADOS.NO_NOTIFICABLE || caso.resultado)) return false;
+      // teléfono/nombre inválido quedan aparte en "Diligencias con falta de información",
+      // y las marcadas como duplicadas quedan aparte en "Duplicadas / No gestionadas" —
+      // entre las tres listas suman todo lo que está sin resultado en la planilla.
+      if (filtros.sinResultado && (caso.resultado || caso.estado === ESTADOS.NO_NOTIFICABLE || caso.duplicado)) return false;
+      // "Diligencias con falta de información": sin resultado, no duplicada, y con
+      // teléfono/nombre inválido. Apenas se certifica (queda con un resultado), sale de
+      // esta lista y pasa a contarse sólo en su resultado — así nunca se cuenta dos veces.
+      if (filtros.faltaInformacion && (caso.duplicado || caso.estado !== ESTADOS.NO_NOTIFICABLE || caso.resultado)) return false;
+      // "Duplicadas / No gestionadas": marcadas al cargar por coincidir RIT+correlativo con
+      // un caso ya existente, y todavía sin resultado. Igual que las otras dos, sale de acá
+      // apenas se le registra un resultado real.
+      if (filtros.duplicado && (!caso.duplicado || caso.resultado)) return false;
       if (filtros.materia && caso.materia !== filtros.materia) return false;
       if (filtros.tribunal && caso.tribunal !== filtros.tribunal) return false;
       if (filtros.texto) {
@@ -2479,7 +2520,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   }
 
   function limpiarFiltros() {
-    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
+    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, duplicado: false, materia: '', tribunal: '' };
+    ordenListaCasos = { campo: null, asc: true };
     $('#buscador').value = ''; $('#filtroEstado').value = '';
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
     if ($('#buscadorControl')) $('#buscadorControl').value = '';
@@ -2500,6 +2542,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function etiquetaFiltroActivo() {
     if (filtros.sinResultado) return 'Pendientes de diligencia';
     if (filtros.faltaInformacion) return 'Diligencias con falta de información';
+    if (filtros.duplicado) return 'Duplicadas / No gestionadas';
     if (filtros.estado) return filtros.estado;
     if (filtros.resultado) return 'Diligencia: ' + etiquetaResultado(filtros.resultado);
     return '';
@@ -2520,9 +2563,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // Aplica el filtro de un indicador (vive tanto en "Completar datos" como en "Control")
   // y actualiza ambas vistas en el sitio, sin forzar un cambio de sección.
   function filtrarDesdeIndicador(tipo) {
-    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, materia: '', tribunal: '' };
+    filtros = { texto: '', estado: '', resultado: '', sinResultado: false, faltaInformacion: false, duplicado: false, materia: '', tribunal: '' };
     if (tipo === 'pendientes') filtros.sinResultado = true;
     else if (tipo === 'nonotificable') filtros.faltaInformacion = true;
+    else if (tipo === 'duplicado') filtros.duplicado = true;
     else if (tipo === 'positiva') filtros.resultado = 'Positiva';
     else if (tipo === 'negativa') filtros.resultado = 'Negativa';
     else if (tipo === 'norealizada') filtros.resultado = 'No realizada';
@@ -2567,10 +2611,26 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
   }
 
+  // Orden explícito por columna (fecha de audiencia o tribunal), a pedido de JC.
+  // Mientras no se haya hecho clic en ningún encabezado, se usa el orden de
+  // prioridad de siempre (cautelares, luego fecha de audiencia, luego fecha de
+  // resolución). "Limpiar filtros" también repone este orden a su estado inicial.
+  var ordenListaCasos = { campo: null, asc: true };
+
+  function ordenarListaCasos(lista) {
+    if (!ordenListaCasos.campo) return ordenarPorPrioridad(lista);
+    var campo = ordenListaCasos.campo, asc = ordenListaCasos.asc;
+    return lista.slice().sort(function (a, b) {
+      var x = a[campo] || '', y = b[campo] || '';
+      if (x === y) return 0;
+      return (x < y ? -1 : 1) * (asc ? 1 : -1);
+    });
+  }
+
   function pintarListaCasos() {
     pintarChipFiltro();
     renderizarIndicadores('indicadoresCasos');
-    var lista = ordenarPorPrioridad(casosFiltrados());
+    var lista = ordenarListaCasos(casosFiltrados());
     var contenedor = $('#listaCasos');
     if (!lista.length) {
       contenedor.innerHTML = '<div class="tarjeta">' +
@@ -2588,12 +2648,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       var telefono = analizarTelefono(caso.telefono);
       var alertas = telefono.avisos.length + (nombreDudoso(caso.nombre) ? 1 : 0) +
                     (caso.confianzaDomicilio !== 'alta' && caso.tribunal ? 1 : 0);
-      return '<tr data-id="' + caso.id + '" style="cursor:pointer">' +
-        '<td class="celda-rit">' + escapar(caso.rit) + '<div style="font-size:11.5px;color:var(--texto-suave);font-weight:400">N° ' + escapar(caso.correlativo) + '</div></td>' +
+      var esDuplicadoSinResolver = caso.duplicado && !caso.resultado;
+      return '<tr data-id="' + caso.id + '" style="cursor:pointer"' +
+          (esDuplicadoSinResolver ? ' class="fila-duplicada"' : '') + '>' +
+        '<td class="celda-rit">' + escapar(caso.rit) +
+          (esDuplicadoSinResolver ? ' <span class="chip chip-duplicado">Duplicado</span>' : '') +
+          '<div style="font-size:11.5px;color:var(--texto-suave);font-weight:400">N° ' + escapar(caso.correlativo) + '</div></td>' +
         '<td class="celda-corta">' + escapar(caso.nombre || '—') +
           '<div style="font-size:11.5px;color:var(--texto-suave)">' + escapar(caso.tipoParticipante) + '</div></td>' +
         '<td>' + escapar(caso.materia) + '</td>' +
         '<td class="celda-corta">' + escapar(caso.tribunal) + '</td>' +
+        '<td>' + escapar(fechaCorta(caso.fechaAudiencia) || '—') + '</td>' +
         '<td>' + escapar(caso.telefono || '—') + '</td>' +
         '<td><span class="chip ' + claseChip(caso.estado) + '">' + escapar(caso.estado) + '</span>' +
           (faltan.length && caso.estado === ESTADOS.RECIBIDO
@@ -2605,15 +2670,29 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         '</tr>';
     }).join('');
 
+    var flechaOrden = function (campo) {
+      if (ordenListaCasos.campo !== campo) return '';
+      return ordenListaCasos.asc ? ' ▲' : ' ▼';
+    };
     contenedor.innerHTML = '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
-      '<th>RIT</th><th>Participante</th><th>Materia</th><th>Tribunal</th><th>Teléfono</th>' +
-      '<th>Estado</th><th>Avisos</th>' + (variosFuncionarios ? '<th>Funcionario</th>' : '') +
+      '<th>RIT</th><th>Requerido</th><th>Materia</th>' +
+      '<th class="columna-ordenable" data-campo="tribunal">Tribunal' + flechaOrden('tribunal') + '</th>' +
+      '<th class="columna-ordenable" data-campo="fechaAudiencia">Fecha de audiencia' + flechaOrden('fechaAudiencia') + '</th>' +
+      '<th>Teléfono</th><th>Estado</th><th>Avisos</th>' + (variosFuncionarios ? '<th>Funcionario</th>' : '') +
       '</tr></thead><tbody>' + filas + '</tbody></table></div>' +
       '<p class="campo-ayuda" style="margin-top:var(--e2)">' + lista.length + ' de ' + almacen.casos.length +
       ' caso(s). Haga clic en una fila para abrir la ficha.</p>';
 
     $$('#listaCasos tbody tr').forEach(function (fila) {
       fila.addEventListener('click', function () { abrirFicha(fila.getAttribute('data-id')); });
+    });
+    $$('#listaCasos thead th[data-campo]').forEach(function (th) {
+      th.addEventListener('click', function () {
+        var campo = th.getAttribute('data-campo');
+        ordenListaCasos.asc = ordenListaCasos.campo === campo ? !ordenListaCasos.asc : true;
+        ordenListaCasos.campo = campo;
+        pintarListaCasos();
+      });
     });
   }
 
@@ -2666,7 +2745,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<option value="__otro__"' + (esOtro ? ' selected' : '') + '>Otro (especificar)</option>';
     return '<div class="campo"><label for="f-tipoParticipante-select">A quién se notifica</label>' +
       '<select id="f-tipoParticipante-select">' + opciones + '</select>' +
-      '<input id="f-tipoParticipante-otro" type="text" placeholder="Escriba la calidad del participante" ' +
+      '<input id="f-tipoParticipante-otro" type="text" placeholder="Escriba la calidad del requerido" ' +
         'style="margin-top:var(--e2)' + (esOtro ? '' : ';display:none') + '" value="' +
         escapar(esOtro ? valor : '') + '">' +
       '<input type="hidden" id="f-tipoParticipante" value="' + escapar(valor || '') + '">' +
@@ -2691,11 +2770,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<span class="campo-error" id="e-tipoAudiencia"></span></div>';
   }
 
-  // Lista de documentos que se entregan: se agregan uno por uno y quedan
-  // enumerados (1, 2, 3…), en vez de un solo texto libre difícil de releer
-  // en la certificación cuando son varios documentos.
-  function campoDocumentos(caso) {
-    var lista = caso.documentosLista || [];
+  // Filas de la lista de documentos, compartidas entre el render inicial de la
+  // ficha (campoDocumentos) y la actualización dirigida tras agregar/quitar
+  // (pintarListaDocumentosFicha) — una sola plantilla, sin duplicar el HTML.
+  function filasDocumentos(lista) {
     var filas = lista.map(function (texto, i) {
       return '<div class="documento-item">' +
         '<span class="documento-numero">' + (i + 1) + '</span>' +
@@ -2703,9 +2781,39 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         '<button type="button" class="documento-quitar" data-indice="' + i +
           '" aria-label="Quitar documento ' + (i + 1) + '">×</button></div>';
     }).join('');
+    return filas || '<div class="lista-documentos-vacia">Sin documentos agregados.</div>';
+  }
+
+  // Actualiza SÓLO la lista de documentos dentro de la ficha abierta, sin volver
+  // a dibujar el resto del formulario. Antes esto se hacía con abrirFicha(), que
+  // redibuja la ficha completa desde los datos ya guardados — si el funcionario
+  // tenía escrito RUN, fecha u otro campo sin haber apretado "Guardar" todavía,
+  // ese texto se perdía apenas se agregaba o quitaba un documento. Corregido
+  // 24-08-2026 (segundo reporte del mismo síntoma; la causa real no era la
+  // sincronización con la planilla compartida, sino este redibujado completo).
+  function pintarListaDocumentosFicha() {
+    var contenedor = $('#listaDocumentosFicha');
+    if (!contenedor || !casoAbierto) return;
+    contenedor.innerHTML = filasDocumentos(casoAbierto.documentosLista || []);
+    $$('#listaDocumentosFicha .documento-quitar').forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        var indice = parseInt(boton.getAttribute('data-indice'), 10);
+        refrescarCasoAbierto();
+        casoAbierto.documentosLista.splice(indice, 1);
+        marcarPropiedad(casoAbierto);
+        guardarAlmacen();
+        pintarListaDocumentosFicha();
+      });
+    });
+  }
+
+  // Lista de documentos que se entregan: se agregan uno por uno y quedan
+  // enumerados (1, 2, 3…), en vez de un solo texto libre difícil de releer
+  // en la certificación cuando son varios documentos.
+  function campoDocumentos(caso) {
+    var lista = caso.documentosLista || [];
     return '<div class="campo"><label>Documento(s) que se entregan</label>' +
-      '<div class="lista-documentos" id="listaDocumentosFicha">' +
-      (filas || '<div class="lista-documentos-vacia">Sin documentos agregados.</div>') + '</div>' +
+      '<div class="lista-documentos" id="listaDocumentosFicha">' + filasDocumentos(lista) + '</div>' +
       '<div class="agregar-documento">' +
       '<input type="text" id="nuevoDocumentoTexto" placeholder="acta de audiencia de fecha…">' +
       '<button type="button" class="boton boton-secundario boton-pequeno" id="btnAgregarDocumento">Agregar</button>' +
@@ -2780,7 +2888,16 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       return html;
     }
 
-    return panelGenerarNormal;
+    // A pedido de JC (24-08-2026): el notificador a veces descubre, ya trabajando
+    // el caso, que la resolución real no ordena notificar por WhatsApp (dato que
+    // no se puede detectar solo, a diferencia del teléfono inválido). Esta opción
+    // sólo aparece para causas todavía pendientes (no finalizadas, no ya marcadas
+    // no notificable) y mueve el caso a "Diligencias con falta de información",
+    // listo para certificar de inmediato.
+    return panelGenerarNormal +
+      '<div class="panel-generar-alterno"><button class="boton boton-secundario boton-pequeno" ' +
+      'type="button" id="btnResolucionSinWhatsapp">La resolución no ordena notificar por WhatsApp</button>' +
+      '<span class="campo-ayuda">Pasa el caso a "Diligencias con falta de información", listo para certificar.</span></div>';
   }
 
   function abrirFicha(id) {
@@ -2818,6 +2935,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       avisos.push({ tipo: 'info', texto: 'Causa finalizada (resultado: ' + etiquetaResultado(caso.resultado) +
         '). Queda en modo solo lectura; use "Reabrir" para volver a editarla.' });
     }
+    if (caso.duplicado && !caso.resultado) {
+      avisos.push({ tipo: 'alerta', texto: 'Este caso coincide en RIT y correlativo con otra causa ya ' +
+        'cargada — revise si es un duplicado real o una diligencia nueva antes de gestionarlo. Cuenta en ' +
+        '"Duplicadas / No Gestionadas" hasta que se le registre un resultado.' });
+    }
     if (caso.estado === ESTADOS.NO_NOTIFICABLE) {
       var razones = [];
       if (!String(caso.nombre || '').trim()) razones.push('falta el nombre del participante');
@@ -2848,7 +2970,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     html += '<div class="seccion-ficha"><h4>Datos de origen · Planilla 1</h4><div class="datos-origen">' +
       [['Correlativo', caso.correlativo], ['RIT', caso.rit], ['Materia', caso.materia],
-       ['Tipo de participante', caso.tipoParticipante], ['Teléfono informado', caso.telefono || '—'],
+       ['Tipo de requerido', caso.tipoParticipante], ['Teléfono informado', caso.telefono || '—'],
        ['Tribunal', caso.tribunal], ['Fecha resolución', fechaCorta(caso.fechaResolucion) || '—'],
        ['Fecha envío ICA', caso.fechaEnvioIca || '—'], ['Estado en origen', caso.estadoOrigen || '—']]
       .map(function (par) {
@@ -2977,8 +3099,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#fichaCuerpo').addEventListener('input', actualizarAvisoFaltantes);
 
     // La lista de documentos se guarda al toque: agregar o quitar es una acción,
-    // no un campo de formulario que espere al botón Guardar.
+    // no un campo de formulario que espere al botón Guardar. Actualiza sólo esa
+    // lista (pintarListaDocumentosFicha), sin redibujar el resto de la ficha, para
+    // no perder campos que el funcionario haya escrito y todavía no guardado.
     if (!esAjeno(caso) && !estaFinalizada(caso)) {
+      pintarListaDocumentosFicha();   // conecta los botones "×" ya presentes al abrir la ficha
       var agregarDocumento = function () {
         var entrada = $('#nuevoDocumentoTexto');
         var texto = entrada.value.trim();
@@ -2988,9 +3113,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         casoAbierto.documentosLista.push(texto);
         marcarPropiedad(casoAbierto);
         guardarAlmacen();
-        abrirFicha(casoAbierto.id);
-        var campo = $('#nuevoDocumentoTexto');
-        if (campo) campo.focus();   // permite agregar varios seguidos sin volver a hacer clic
+        pintarListaDocumentosFicha();
+        entrada.value = '';
+        entrada.focus();   // permite agregar varios seguidos sin volver a hacer clic
       };
       if ($('#btnAgregarDocumento')) {
         $('#btnAgregarDocumento').addEventListener('click', agregarDocumento);
@@ -2998,16 +3123,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
           if (e.key === 'Enter') { e.preventDefault(); agregarDocumento(); }
         });
       }
-      $$('.documento-quitar').forEach(function (boton) {
-        boton.addEventListener('click', function () {
-          var indice = parseInt(boton.getAttribute('data-indice'), 10);
-          refrescarCasoAbierto();
-          casoAbierto.documentosLista.splice(indice, 1);
-          marcarPropiedad(casoAbierto);
-          guardarAlmacen();
-          abrirFicha(casoAbierto.id);
-        });
-      });
     }
 
     // Genera si están los campos que ese documento necesita; si no, dice exactamente cuáles.
@@ -3121,6 +3236,19 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
             var texto = textoDesdeDocx(generarDocumento(plantillaDeMensaje(casoAbierto), casoAbierto));
             copiarAlPortapapeles(texto);
           } catch (e) { mostrarMensaje('Error al preparar el texto: ' + e.message, 'error'); }
+        });
+      }
+      if ($('#btnResolucionSinWhatsapp')) {
+        $('#btnResolucionSinWhatsapp').addEventListener('click', function () {
+          refrescarCasoAbierto();
+          casoAbierto.resolucionNoOrdenaWhatsapp = true;
+          casoAbierto.motivoNoNotificable = 'La resolución no ordena notificar por WhatsApp';
+          recalcularEstado(casoAbierto);
+          marcarPropiedad(casoAbierto);
+          guardarAlmacen();
+          mostrarMensaje('Caso movido a Diligencias con falta de información.', 'ok');
+          abrirFicha(casoAbierto.id);
+          refrescar();
         });
       }
     }
@@ -3250,7 +3378,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
     var mostrar = unicas.slice(0, 100);
     contenedor.innerHTML = '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
-      '<th>RIT</th><th>Participante</th><th>Documento</th><th>Generado</th><th></th>' +
+      '<th>RIT</th><th>Requerido</th><th>Documento</th><th>Generado</th><th></th>' +
       '</tr></thead><tbody>' + mostrar.map(function (e, i) {
         return '<tr><td class="celda-rit">' + escapar(e.caso.rit) + '</td>' +
           '<td class="celda-corta">' + escapar(e.caso.nombre || '—') + '</td>' +
@@ -3279,6 +3407,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function filtroIndicadorActivo() {
     if (filtros.sinResultado) return 'pendientes';
     if (filtros.faltaInformacion) return 'nonotificable';
+    if (filtros.duplicado) return 'duplicado';
     if (filtros.resultado === 'Positiva') return 'positiva';
     if (filtros.resultado === 'Negativa') return 'negativa';
     if (filtros.resultado === 'No realizada') return 'norealizada';
@@ -3304,15 +3433,22 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var certificadasConObservaciones = almacen.casos.filter(function (c) {
       return c.resultado === 'No realizada';
     }).length;
-    var faltaInformacion = almacen.casos.filter(function (c) {
-      return c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado;
+    // "Duplicadas / No gestionadas" tiene prioridad sobre Pendientes/Falta de información:
+    // una causa marcada como duplicada al cargar cuenta ahí mientras no tenga resultado,
+    // sin importar si el teléfono/nombre son válidos o no.
+    var duplicadas = almacen.casos.filter(function (c) {
+      return c.duplicado && !c.resultado;
     }).length;
-    // "Pendientes" y "Diligencias con falta de información" son mutuamente excluyentes:
-    // entre las dos suman exactamente todas las causas sin resultado (columna Resultado
-    // vacía) — la carga total de trabajo del notificador queda repartida en dos listas
-    // según se pueda diligenciar ya mismo o falte corregir un dato primero.
+    var faltaInformacion = almacen.casos.filter(function (c) {
+      return !c.duplicado && c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado;
+    }).length;
+    // "Pendientes", "Diligencias con falta de información" y "Duplicadas / No gestionadas"
+    // son mutuamente excluyentes: entre las tres suman exactamente todas las causas sin
+    // resultado (columna Resultado vacía) — la carga total de trabajo del notificador
+    // queda repartida en tres listas según se pueda diligenciar ya mismo, falte corregir
+    // un dato primero, o haya que revisar si es un duplicado real primero.
     var pendientes = almacen.casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
+      return !c.duplicado && c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
     }).length;
     return [
       { valor: total, etiqueta: 'Casos recibidos', clase: '', filtro: 'total' },
@@ -3322,7 +3458,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       { valor: positivas, etiqueta: 'Diligencias positivas', clase: 'verde', filtro: 'positiva' },
       { valor: negativas, etiqueta: 'Diligencias negativas', clase: 'ambar', filtro: 'negativa' },
       { valor: certificadasConObservaciones, etiqueta: 'Realizada con certificación con observaciones',
-        clase: 'gris', filtro: 'norealizada' }
+        clase: 'gris', filtro: 'norealizada' },
+      { valor: duplicadas, etiqueta: 'Duplicadas / No Gestionadas', clase: 'purpura', filtro: 'duplicado' }
     ];
   }
 
@@ -3420,7 +3557,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       '<div class="tarjeta-titulo">Resultado de la carga · ' + escapar(resumen.archivo) + '</div>' +
       '<div class="rejilla rejilla-4">' +
       [{ v: resumen.nuevos, e: 'Casos nuevos', c: 'verde' },
-       { v: resumen.duplicados, e: 'Ya existían (no se tocan)', c: '' },
+       { v: resumen.duplicados, e: 'Duplicadas (cargadas y marcadas para revisar)', c: 'purpura' },
        { v: resumen.noNotificables, e: 'Para devolver a jefatura', c: 'rojo' },
        { v: resumen.conAvisos, e: 'Con avisos de teléfono', c: 'ambar' }].map(function (i) {
         return '<div class="indicador ' + i.c + '"><div class="indicador-valor">' + i.v +
@@ -3444,18 +3581,55 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         return '<tr><td>' + escapar(fechaCorta(c.fecha) + ' ' + String(c.fecha).slice(11, 16)) + '</td>' +
           '<td class="celda-corta">' + escapar(c.archivo) + '</td><td>' + c.filas + '</td><td>' + c.nuevos +
           '</td><td>' + c.duplicados + '</td><td>' + c.noNotificables + '</td>' +
-          '<td><button class="boton boton-secundario boton-pequeno" type="button" data-borrar-carga="' + i +
-          '">Quitar</button></td></tr>';
+          '<td style="display:flex;gap:6px"><button class="boton boton-secundario boton-pequeno" type="button" data-borrar-carga="' + i +
+          '">Quitar</button>' +
+          (c.cargaId ? '<button class="boton boton-peligro boton-pequeno" type="button" data-deshacer-carga="' + i +
+            '" title="Elimina las causas de esta carga, también de la planilla compartida">Deshacer</button>' : '') +
+          '</td></tr>';
       }).join('') + '</tbody></table></div>';
     // Sólo borra el registro del historial de cargas (una bitácora local, no
     // sincronizada con la planilla compartida); las causas que esa carga haya
-    // creado NO se tocan acá — eso se gestiona desde "Completar datos".
+    // creado NO se tocan acá — eso se gestiona desde "Deshacer" o desde
+    // "Gestionar diligencias".
     $$('[data-borrar-carga]').forEach(function (boton) {
       boton.addEventListener('click', function () {
         almacen.cargas.splice(+boton.getAttribute('data-borrar-carga'), 1);
         guardarAlmacen();
         pintarHistorial();
         mostrarMensaje('Registro de carga eliminado del historial.', 'ok');
+      });
+    });
+    // "Deshacer" SÍ elimina las causas de verdad (local y, si hay planilla
+    // compartida, también en el servidor vía la acción "eliminarCarga") — es
+    // para cuando se subió el archivo equivocado por completo, no para quitar
+    // una causa puntual marcada como duplicada (eso se resuelve gestionándola,
+    // nunca borrándola).
+    $$('[data-deshacer-carga]').forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        var indice = +boton.getAttribute('data-deshacer-carga');
+        var carga = almacen.cargas[indice];
+        if (!carga || !carga.cargaId) return;
+        var cuantas = almacen.casos.filter(function (c) { return c.cargaId === carga.cargaId; }).length;
+        var aviso = '¿Deshacer la carga "' + carga.archivo + '"? Se eliminarán ' + cuantas +
+          ' causa(s) que vinieron de ese archivo' +
+          (hayServicio() ? ', también de la planilla compartida' : '') + '. Esta acción no se puede deshacer.';
+        if (!window.confirm(aviso)) return;
+        almacen.casos = almacen.casos.filter(function (c) { return c.cargaId !== carga.cargaId; });
+        almacen.cargas.splice(indice, 1);
+        guardarAlmacen();
+        refrescar();
+        mostrarMensaje(cuantas + ' causa(s) eliminada(s) localmente.', 'ok');
+        if (hayServicio()) {
+          llamarServicio({ accion: 'eliminarCarga', cargaId: carga.cargaId })
+            .then(function (datos) {
+              mostrarMensaje('Carga deshecha también en la planilla compartida (' +
+                datos.eliminados + ' fila(s)).', 'ok');
+            })
+            .catch(function (e) {
+              mostrarMensaje('Se borró localmente, pero no se pudo deshacer en la planilla ' +
+                'compartida: ' + e.message + '. Vuelva a intentarlo desde "Actualizar".', 'error');
+            });
+        }
       });
     });
   }
@@ -3466,7 +3640,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // invente su paleta por defecto.
   var COLOR_POSITIVA = '#1E8E5A', COLOR_NEGATIVA = '#D97E00', COLOR_NOREALIZADA = '#9AA7BC',
       COLOR_PENDIENTE = '#D6336C', COLOR_AZUL = '#1D4E7E', COLOR_AZUL_PROFUNDO = '#0F2A4A',
-      COLOR_ROJO = '#C0392B',
+      COLOR_ROJO = '#C0392B', COLOR_PURPURA = '#7C4DA8',
       COLOR_TEXTO_SUAVE = '#5B6478', FUENTE_GRAFICO = "'Sora', -apple-system, 'Segoe UI', Roboto, sans-serif";
 
   var graficosTablero = {};   // instancias de Chart.js activas, para destruir antes de recrear
@@ -3486,17 +3660,19 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var porMateria = {};
     var porTribunal = {};
     var porDia = {};
-    var noNotificables = 0, finalizadas = 0;
+    var noNotificables = 0, finalizadas = 0, duplicadas = 0;
 
     casos.forEach(function (c) {
       var materia = c.materia || 'Sin clasificar';
       porMateria[materia] = (porMateria[materia] || 0) + 1;
       var trib = c.tribunal || 'Sin tribunal';
       porTribunal[trib] = (porTribunal[trib] || 0) + 1;
-      // "Pendiente" (por diligenciar) y "falta de información" son excluyentes entre sí:
-      // una causa sin resultado y con teléfono/nombre inválido cuenta sólo en la segunda,
-      // no en las dos — juntas suman toda causa sin resultado en la planilla.
-      if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) {
+      // "Pendiente" (por diligenciar), "falta de información" y "duplicadas" son
+      // excluyentes entre sí: una causa sin resultado cuenta en una sola de las
+      // tres — juntas suman toda causa sin resultado en la planilla.
+      if (c.duplicado && !c.resultado) {
+        duplicadas++;
+      } else if (c.estado === ESTADOS.NO_NOTIFICABLE && !c.resultado) {
         noNotificables++;
       } else {
         var r = c.resultado || 'Pendiente';
@@ -3511,7 +3687,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
 
     var pendientes = casos.filter(function (c) {
-      return c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
+      return !c.duplicado && c.estado !== ESTADOS.NO_NOTIFICABLE && !c.resultado;
     }).length;
     var gestionadas = porResultado.Positiva + porResultado.Negativa + porResultado['No realizada'];
     var tasaExito = gestionadas ? Math.round(porResultado.Positiva / gestionadas * 100) : 0;
@@ -3525,7 +3701,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       total: total, porResultado: porResultado, porMateria: porMateria, porTribunal: porTribunal,
       tribunalesOrdenados: tribunalesOrdenados, porDia: porDia, diasOrdenados: diasOrdenados,
       noNotificables: noNotificables, finalizadas: finalizadas, pendientes: pendientes,
-      gestionadas: gestionadas, tasaExito: tasaExito, avance: avance
+      duplicadas: duplicadas, gestionadas: gestionadas, tasaExito: tasaExito, avance: avance
     };
   }
 
@@ -3600,7 +3776,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       tarjetaKpi(m.pendientes, 'Pendientes por diligenciar',
         'Sin resultado y con datos válidos: se pueden trabajar ya mismo.', 'acento') +
       tarjetaKpi(m.noNotificables, 'Diligencias con falta de información',
-        'Sin resultado, pero con teléfono o nombre inválido — falta corregir el dato.', m.noNotificables > 0 ? 'rojo' : '');
+        'Sin resultado, pero con teléfono o nombre inválido — falta corregir el dato.', m.noNotificables > 0 ? 'rojo' : '') +
+      tarjetaKpi(m.duplicadas, 'Duplicadas / No gestionadas',
+        'Coinciden con una causa ya cargada — por revisar antes de trabajarlas.', m.duplicadas > 0 ? 'purpura' : '');
   }
 
   // Barra horizontal apilada de una sola fila + leyenda, hecha en HTML/CSS puro
@@ -3745,9 +3923,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     pintarGraficoCargas();
 
-    // Composición de resultados: una sola barra horizontal apilada. 5 categorías
-    // mutuamente excluyentes (Pendientes por diligenciar y Falta de información son las
-    // dos mitades de "sin resultado"), así que siempre suman el total de causas.
+    // Composición de resultados: una sola barra horizontal apilada. 6 categorías
+    // mutuamente excluyentes (Pendientes, Falta de información y Duplicadas son
+    // las tres partes de "sin resultado"), así que siempre suman el total de causas.
     crearOActualizarGrafico('resultados', 'graficoResultados', {
       type: 'bar',
       data: {
@@ -3757,14 +3935,16 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
           { label: 'Negativa', data: [m.porResultado.Negativa], backgroundColor: COLOR_NEGATIVA },
           { label: 'Con observaciones', data: [m.porResultado['No realizada']], backgroundColor: COLOR_NOREALIZADA },
           { label: 'Por diligenciar', data: [m.porResultado.Pendiente], backgroundColor: COLOR_PENDIENTE },
-          { label: 'Falta de información', data: [m.noNotificables], backgroundColor: COLOR_ROJO }
+          { label: 'Falta de información', data: [m.noNotificables], backgroundColor: COLOR_ROJO },
+          { label: 'Duplicadas / No gestionadas', data: [m.duplicadas], backgroundColor: COLOR_PURPURA }
         ]
       },
       options: opcionesBarras({ apilado: true, horizontal: true, leyenda: true, ocultarX: true, ocultarY: true })
     });
     $('#resultadosLectura').textContent = m.porResultado.Positiva + ' positivas, ' + m.porResultado.Negativa +
       ' negativas, ' + m.porResultado['No realizada'] + ' con observaciones, ' + m.porResultado.Pendiente +
-      ' por diligenciar y ' + m.noNotificables + ' con falta de información — suman ' + m.total + '.';
+      ' por diligenciar, ' + m.noNotificables + ' con falta de información y ' + m.duplicadas +
+      ' duplicadas — suman ' + m.total + '.';
 
     // Causas por tribunal: barras horizontales, los 8 con más volumen.
     var topTribunales = m.tribunalesOrdenados.slice(0, 8);
