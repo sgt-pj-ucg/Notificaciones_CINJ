@@ -639,6 +639,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   padding: var(--e4); text-align: center; overflow-y: auto;
 }
 .pantalla-bienvenida.visible { display: flex; }
+.pantalla-bienvenida.saliendo { animation: bienvenidaSalida .38s ease forwards; }
 
 .bienvenida-marca {
   width: 120px; height: 120px; margin: 0 auto var(--e3);
@@ -660,8 +661,8 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   animation: bienvenidaSubida .5s ease .48s forwards;
 }
 .bienvenida-tarjetas {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: var(--e3); max-width: 980px; width: 100%;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: var(--e3); max-width: 1360px; width: 100%;
 }
 .bienvenida-tarjeta {
   appearance: none; font: inherit; cursor: pointer; text-align: left;
@@ -670,7 +671,8 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   display: flex; flex-direction: column; gap: 6px;
   opacity: 0; transform: translateY(16px);
   animation: bienvenidaSubida .5s ease forwards;
-  transition: transform var(--transicion), border-color var(--transicion), background var(--transicion);
+  transition: transform var(--transicion), border-color var(--transicion), background var(--transicion),
+              opacity .25s ease;
 }
 .bienvenida-tarjeta:hover, .bienvenida-tarjeta:focus-visible {
   transform: translateY(-4px); border-color: var(--acento);
@@ -686,13 +688,36 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
 .bienvenida-tarjetas .bienvenida-tarjeta:nth-child(4) { animation-delay: .84s; }
 .bienvenida-tarjetas .bienvenida-tarjeta:nth-child(5) { animation-delay: .92s; }
 
+/* Al elegir una tarjeta, todas se apagan de inmediato salvo la elegida, que
+   además se "activa" (más luz, ligero zoom) antes de pasar a la app. */
+.pantalla-bienvenida.saliendo .bienvenida-tarjeta { opacity: .25; transform: translateY(0) scale(.97); }
+.pantalla-bienvenida.saliendo .bienvenida-tarjeta.elegida {
+  opacity: 1; border-color: var(--acento); background: rgba(214,51,108,.16);
+  transform: translateY(0) scale(1.02);
+}
+
+.bienvenida-pie {
+  position: absolute; bottom: var(--e4); left: 0; right: 0;
+  text-align: center; color: #7C93AE; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+  opacity: 0; animation: bienvenidaSubida .5s ease 1.05s forwards;
+}
+
 @keyframes bienvenidaEntrada { to { opacity: 1; transform: scale(1); } }
 @keyframes bienvenidaSubida { to { opacity: 1; transform: translateY(0); } }
+@keyframes bienvenidaSalida { to { opacity: 0; transform: scale(1.03); } }
+
+.app-protegida.entrando { animation: appEntrada .5s ease .12s backwards; }
+@keyframes appEntrada { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .bienvenida-marca, .bienvenida-titulo, .bienvenida-sub, .bienvenida-tarjeta {
+  .bienvenida-marca, .bienvenida-titulo, .bienvenida-sub, .bienvenida-tarjeta, .bienvenida-pie,
+  .pantalla-bienvenida.saliendo, .pantalla-bienvenida.saliendo .bienvenida-tarjeta, .app-protegida.entrando {
     animation: none !important; opacity: 1 !important; transform: none !important;
   }
+}
+
+@media (max-width: 1100px) {
+  .bienvenida-tarjetas { grid-template-columns: repeat(3, 1fr); max-width: 720px; }
 }
 
 @media (max-width: 640px) {
@@ -787,6 +812,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
       <div class="bienvenida-tarjeta-texto">Indicadores y gráficos de avance en tiempo real.</div>
     </button>
   </div>
+  <p class="bienvenida-pie">Iltma. Corte de Apelaciones de La Serena · 2026</p>
 </div>
 
 <div class="app-protegida" id="appProtegida">
@@ -4548,11 +4574,17 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     }
     // La bienvenida animada sólo se muestra una vez, justo tras entrar la
     // clave (ver rama de sessionStorage arriba, que la salta por completo).
-    var entrarAApp = function (vistaInicial) {
-      bienvenida.classList.remove('visible');
+    var entrarAApp = function (vistaInicial, tarjetaElegida) {
       bienvenida.setAttribute('aria-hidden', 'true');
-      app.classList.add('visible');
-      if (vistaInicial) { cambiarVista(vistaInicial); }
+      if (tarjetaElegida) { tarjetaElegida.classList.add('elegida'); }
+      bienvenida.classList.add('saliendo');
+      setTimeout(function () {
+        bienvenida.classList.remove('visible', 'saliendo');
+        if (tarjetaElegida) { tarjetaElegida.classList.remove('elegida'); }
+        app.classList.add('visible', 'entrando');
+        if (vistaInicial) { cambiarVista(vistaInicial); }
+        setTimeout(function () { app.classList.remove('entrando'); }, 650);
+      }, 380);
     };
     var intentar = function () {
       if ($('#claveAcceso').value === CLAVE_ACCESO) {
@@ -4576,7 +4608,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
     $$('.bienvenida-tarjeta').forEach(function (boton) {
       boton.addEventListener('click', function () {
-        entrarAApp(boton.getAttribute('data-inicio'));
+        entrarAApp(boton.getAttribute('data-inicio'), boton);
       });
     });
     setTimeout(function () { $('#claveAcceso').focus(); }, 50);
