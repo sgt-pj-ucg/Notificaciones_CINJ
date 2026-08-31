@@ -937,6 +937,8 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
         <div>El mensaje de WhatsApp <strong>no se envía desde la plataforma</strong>: se genera el documento y el
           texto listo para copiar y pegar en el envío manual.</div>
       </div>
+      <input class="buscador" type="search" id="buscadorDocumentos"
+        placeholder="Buscar por RIT, nombre o tribunal…" style="margin-bottom:var(--e3)">
       <div id="historialDocumentos"></div>
     </div>
   </section>
@@ -2694,8 +2696,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $('#buscador').value = ''; $('#filtroEstado').value = '';
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
     if ($('#buscadorControl')) $('#buscadorControl').value = '';
+    if ($('#buscadorDocumentos')) $('#buscadorDocumentos').value = '';
     pintarListaCasos();
     if ($('#tablaControl')) pintarControl();
+    if ($('#historialDocumentos')) pintarHistorialDocumentos();
   }
 
   // Texto que ve el funcionario para el resultado "No realizada": se certificó la
@@ -2742,11 +2746,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     // 'total' no aplica ningún filtro: muestra todos los casos.
     $('#buscador').value = ''; $('#filtroEstado').value = filtros.estado;
     $('#filtroMateria').value = ''; $('#filtroTribunal').value = '';
+    if ($('#buscadorControl')) $('#buscadorControl').value = '';
+    if ($('#buscadorDocumentos')) $('#buscadorDocumentos').value = '';
     var vistaActual = ($('.etapa.activa') || {}).getAttribute
       ? $('.etapa.activa').getAttribute('data-vista') : '';
     if (vistaActual !== 'casos' && vistaActual !== 'control') cambiarVista('casos');
     pintarListaCasos();
     if ($('#tablaControl')) pintarControl();
+    if ($('#historialDocumentos')) pintarHistorialDocumentos();
   }
 
   function bloqueVacio(texto) {
@@ -3548,6 +3555,19 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     if (!entradas.length) {
       contenedor.innerHTML = bloqueVacio('Todavía no se ha generado ningún documento.');
       return;
+    }
+    // Mismo buscador (por RIT, nombre o tribunal) que "Gestionar diligencias" y
+    // "Control y reportabilidad" — comparte filtros.texto, sincronizado entre los tres.
+    if (filtros.texto) {
+      var buscado = normalizar(filtros.texto);
+      entradas = entradas.filter(function (e) {
+        var contenido = normalizar([e.caso.rit, e.caso.nombre, e.caso.tribunal].join(' '));
+        return contenido.indexOf(buscado) >= 0;
+      });
+      if (!entradas.length) {
+        contenedor.innerHTML = bloqueVacio('Ningún documento coincide con la búsqueda.');
+        return;
+      }
     }
     entradas.sort(function (a, b) { return String(b.fecha).localeCompare(String(a.fecha)); });
     // Un mismo documento puede regenerarse varias veces (correcciones, reintentos); el
@@ -4472,20 +4492,28 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       if (e.dataTransfer.files && e.dataTransfer.files[0]) leerArchivoPlanilla(e.dataTransfer.files[0]);
     });
 
-    $('#buscador').addEventListener('input', function (e) {
-      filtros.texto = e.target.value;
-      if ($('#buscadorControl')) $('#buscadorControl').value = e.target.value;
-      pintarListaCasos();
-      pintarControl();
-    });
-    if ($('#buscadorControl')) {
-      $('#buscadorControl').addEventListener('input', function (e) {
+    // El buscador de texto (RIT/nombre/tribunal) es uno solo conceptualmente (filtros.texto),
+    // repetido en tres pantallas (Gestionar diligencias, Control y Documentos) para no obligar
+    // a volver a "Gestionar diligencias" cada vez — los tres campos quedan siempre sincronizados.
+    var camposBuscador = ['#buscador', '#buscadorControl', '#buscadorDocumentos'];
+    var sincronizarBuscadores = function (valor, origen) {
+      camposBuscador.forEach(function (sel) {
+        if (sel === origen) return;
+        var campo = $(sel);
+        if (campo) campo.value = valor;
+      });
+    };
+    camposBuscador.forEach(function (sel) {
+      var campo = $(sel);
+      if (!campo) return;
+      campo.addEventListener('input', function (e) {
         filtros.texto = e.target.value;
-        if ($('#buscador')) $('#buscador').value = e.target.value;
+        sincronizarBuscadores(e.target.value, sel);
         pintarListaCasos();
         pintarControl();
+        pintarHistorialDocumentos();
       });
-    }
+    });
     $('#filtroEstado').addEventListener('change', function (e) {
       filtros.estado = e.target.value; filtros.resultado = '';
       pintarListaCasos();
