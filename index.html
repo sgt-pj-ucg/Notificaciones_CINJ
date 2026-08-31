@@ -636,7 +636,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   position: fixed; inset: 0; z-index: 200;
   background: radial-gradient(circle at 30% 20%, #163A5F, var(--azul-profundo) 60%);
   display: none; flex-direction: column; align-items: center; justify-content: center;
-  padding: var(--e4); text-align: center; overflow-y: auto;
+  padding: var(--e4) var(--e4) 130px; text-align: center; overflow-y: auto;
 }
 .pantalla-bienvenida.visible { display: flex; }
 .pantalla-bienvenida.saliendo { animation: bienvenidaSalida .38s ease forwards; }
@@ -662,13 +662,13 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
 }
 .bienvenida-tarjetas {
   display: grid; grid-template-columns: repeat(5, 1fr);
-  gap: var(--e3); max-width: 1360px; width: 100%;
+  gap: 20px; max-width: 1500px; width: 100%;
 }
 .bienvenida-tarjeta {
   appearance: none; font: inherit; cursor: pointer; text-align: left;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
-  border-radius: 14px; padding: var(--e4) var(--e3); color: #fff;
-  display: flex; flex-direction: column; gap: 6px;
+  border-radius: 16px; padding: var(--e5) var(--e4); color: #fff;
+  display: flex; flex-direction: column; gap: 8px;
   opacity: 0; transform: translateY(16px);
   animation: bienvenidaSubida .5s ease forwards;
   transition: transform var(--transicion), border-color var(--transicion), background var(--transicion),
@@ -678,9 +678,9 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   transform: translateY(-4px); border-color: var(--acento);
   background: rgba(255,255,255,.1); outline: none;
 }
-.bienvenida-tarjeta svg { width: 26px; height: 26px; color: var(--acento); flex: 0 0 auto; }
-.bienvenida-tarjeta-titulo { font-size: 15px; font-weight: 600; }
-.bienvenida-tarjeta-texto { font-size: 12.5px; color: #A9BDD4; line-height: 1.5; }
+.bienvenida-tarjeta svg { width: 30px; height: 30px; color: var(--acento); flex: 0 0 auto; }
+.bienvenida-tarjeta-titulo { font-size: 17px; font-weight: 600; }
+.bienvenida-tarjeta-texto { font-size: 13.5px; color: #A9BDD4; line-height: 1.5; }
 
 .bienvenida-tarjetas .bienvenida-tarjeta:nth-child(1) { animation-delay: .6s; }
 .bienvenida-tarjetas .bienvenida-tarjeta:nth-child(2) { animation-delay: .68s; }
@@ -697,10 +697,12 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
 }
 
 .bienvenida-pie {
-  position: absolute; bottom: var(--e4); left: 0; right: 0;
-  text-align: center; color: #7C93AE; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+  position: absolute; bottom: var(--e5); left: 0; right: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: #D3DFEF; font-size: 13.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
   opacity: 0; animation: bienvenidaSubida .5s ease 1.05s forwards;
 }
+.bienvenida-pie-linea { width: 48px; height: 2px; background: var(--acento); border-radius: 2px; }
 
 @keyframes bienvenidaEntrada { to { opacity: 1; transform: scale(1); } }
 @keyframes bienvenidaSubida { to { opacity: 1; transform: translateY(0); } }
@@ -716,7 +718,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1250px) {
   .bienvenida-tarjetas { grid-template-columns: repeat(3, 1fr); max-width: 720px; }
 }
 
@@ -812,7 +814,10 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
       <div class="bienvenida-tarjeta-texto">Indicadores y gráficos de avance en tiempo real.</div>
     </button>
   </div>
-  <p class="bienvenida-pie">Iltma. Corte de Apelaciones de La Serena · 2026</p>
+  <div class="bienvenida-pie">
+    <span class="bienvenida-pie-linea" aria-hidden="true"></span>
+    Iltma. Corte de Apelaciones de La Serena · 2026
+  </div>
 </div>
 
 <div class="app-protegida" id="appProtegida">
