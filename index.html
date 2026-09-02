@@ -965,7 +965,7 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
         placeholder="Buscar por RIT, nombre o tribunal…" style="margin-bottom:var(--e3)">
       <div style="display:flex; gap:var(--e2); flex-wrap:wrap; margin-bottom:var(--e3)">
         <button class="boton boton-acento" type="button" id="btnExportarPlanilla2">Exportar planilla de control (.xlsx)</button>
-        <button class="boton boton-secundario" type="button" id="btnInformeJefatura">Informe para jefatura (.html)</button>
+        <button class="boton boton-acento" type="button" id="btnInformeJefatura">Informe para jefatura (.html)</button>
       </div>
       <div id="filtroActivoControl"></div>
       <div id="tablaControl"></div>
@@ -2200,7 +2200,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       textoDocumentos(caso),
       almacen.configuracion.notificador,
       caso.certificacion,
-      caso.resultado,
+      caso.resultado === 'No realizada' ? 'Realizada con observación' : caso.resultado,
       caso.resultado ? fechaCorta(caso.fechaNotificacion) : '',
       caso.fechaEnvioIca,
       caso.notas
