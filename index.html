@@ -965,7 +965,6 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
         placeholder="Buscar por RIT, nombre o tribunal…" style="margin-bottom:var(--e3)">
       <div style="display:flex; gap:var(--e2); flex-wrap:wrap; margin-bottom:var(--e3)">
         <button class="boton boton-acento" type="button" id="btnExportarPlanilla2">Exportar planilla de control (.xlsx)</button>
-        <button class="boton boton-secundario" type="button" id="btnExportarCsv">Exportar CSV</button>
         <button class="boton boton-secundario" type="button" id="btnInformeJefatura">Informe para jefatura (.html)</button>
       </div>
       <div id="filtroActivoControl"></div>
@@ -2176,7 +2175,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var telefono = analizarTelefono(caso.telefono);
     var realizada = !!(caso.resultado || caso.fechaNotificacion);
     var estadoNotificacion = caso.duplicado && !caso.resultado ? 'Duplicado' :
-      caso.resultado === 'No realizada' ? 'No realizada' :
+      caso.resultado === 'No realizada' ? 'Realizada con observación' :
       realizada ? 'Realizada' : 'Pendiente';
     return [
       caso.correlativo,
@@ -2226,20 +2225,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
     XLSX.writeFile(libro, 'Control_CINJ_' + aIso(new Date()) + '.xlsx');
     mostrarMensaje('Planilla de control exportada.', 'ok');
-  }
-
-  function exportarCsv() {
-    if (!almacen.casos.length) { mostrarMensaje('No hay casos para exportar.', 'error'); return; }
-    var filas = [REFERENCIA.encabezados_planilla2].concat(almacen.casos.map(filaControl));
-    var csv = filas.map(function (fila) {
-      return fila.map(function (celda) {
-        var texto = String(celda === null || celda === undefined ? '' : celda).replace(/"/g, '""');
-        return '"' + texto + '"';
-      }).join(';');
-    }).join('\r\n');
-    descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }),
-      'Control_CINJ_' + aIso(new Date()) + '.csv');
-    mostrarMensaje('Archivo CSV exportado.', 'ok');
   }
 
   /* ---------- Informe de gestión para jefatura ----------
@@ -2730,7 +2715,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // valor guardado internamente sigue siendo 'No realizada' — no se migra el dato
   // ya existente en la planilla compartida, sólo cambia cómo se muestra.
   function etiquetaResultado(valor) {
-    if (valor === 'No realizada') return 'Realizada con certificación con observaciones';
+    if (valor === 'No realizada') return 'Realizada con observación';
     return valor || 'Sin registrar';
   }
 
@@ -3646,13 +3631,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   //  - Pendientes por diligenciar: sin resultado y con datos válidos — se puede trabajar
   //    ya mismo; se rebaja hacia Positiva/Negativa a medida que se notifica.
   //  - Diligencias con falta de información: sin resultado Y con teléfono/nombre
-  //    inválido — se rebaja hacia "Realizada con certificación con observaciones" al
-  //    certificar (o hacia Positiva/Negativa si jefatura corrige el dato). Entre esta y
-  //    "Pendientes por diligenciar" suman toda causa sin resultado — es la carga total
-  //    de trabajo del notificador, repartida según se pueda diligenciar ya o no.
+  //    inválido — se rebaja hacia "Realizada con observación" al certificar (o hacia
+  //    Positiva/Negativa si jefatura corrige el dato). Entre esta y "Pendientes por
+  //    diligenciar" suman toda causa sin resultado — es la carga total de trabajo del
+  //    notificador, repartida según se pueda diligenciar ya o no.
   //  - Diligencias positivas / negativas: como siempre.
-  //  - Realizada con certificación con observaciones: cualquier causa ya certificada
-  //    así, tenga o no además un problema de datos — al certificarse queda resuelta.
+  //  - Realizada con observación: cualquier causa ya certificada así, tenga o no además
+  //    un problema de datos — al certificarse queda resuelta.
   function tarjetasIndicador() {
     var total = almacen.casos.length;
     var positivas = almacen.casos.filter(function (c) { return c.resultado === 'Positiva'; }).length;
@@ -3684,7 +3669,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         filtro: 'nonotificable' },
       { valor: positivas, etiqueta: 'Diligencias positivas', clase: 'verde', filtro: 'positiva' },
       { valor: negativas, etiqueta: 'Diligencias negativas', clase: 'ambar', filtro: 'negativa' },
-      { valor: certificadasConObservaciones, etiqueta: 'Realizada con certificación con observaciones',
+      { valor: certificadasConObservaciones, etiqueta: 'Realizada con observación',
         clase: 'gris', filtro: 'norealizada' },
       { valor: duplicadas, etiqueta: 'Duplicadas / No Gestionadas', clase: 'purpura', filtro: 'duplicado' }
     ];
@@ -4558,7 +4543,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     });
 
     $('#btnExportarPlanilla2').addEventListener('click', exportarPlanilla2);
-    $('#btnExportarCsv').addEventListener('click', exportarCsv);
     $('#btnInformeJefatura').addEventListener('click', generarInformeJefatura);
     $('#btnConfiguracion').addEventListener('click', abrirConfiguracion);
     $('#btnActualizar').addEventListener('click', function () {
