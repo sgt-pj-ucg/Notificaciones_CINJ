@@ -2090,6 +2090,27 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       .replace(/[^A-Za-z0-9\-_ ]/g, '').replace(/\s+/g, '_').slice(0, 70);
   }
 
+  // Sigla del tribunal para el nombre del archivo (a pedido de JC), ej.
+  // "Juzgado de Familia de La Serena" -> "JFLASERENA": iniciales de las palabras
+  // que describen el tipo de tribunal (se ignoran "de"/"del"/"y") + el nombre de
+  // la ciudad/comuna (todo lo que sigue al ultimo "de") pegado sin espacios ni
+  // tildes. Se deriva del texto que ya tiene el caso, asi que un tribunal nuevo
+  // que se agregue al catalogo queda cubierto sin mantener una lista de siglas.
+  function siglaTribunal(nombreTribunal) {
+    var palabras = String(nombreTribunal || '').trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(Boolean);
+    if (!palabras.length) return '';
+    var idxUltimoDe = -1;
+    palabras.forEach(function (p, i) { if (p.toLowerCase() === 'de') idxUltimoDe = i; });
+    var palabrasTipo = idxUltimoDe >= 0 ? palabras.slice(0, idxUltimoDe) : palabras;
+    var palabrasUbicacion = idxUltimoDe >= 0 ? palabras.slice(idxUltimoDe + 1) : [];
+    var CONECTORES = ['de', 'del', 'y'];
+    var iniciales = palabrasTipo.filter(function (p) { return CONECTORES.indexOf(p.toLowerCase()) < 0; })
+      .map(function (p) { return p.charAt(0).toUpperCase(); }).join('');
+    var ubicacion = palabrasUbicacion.join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return iniciales + ubicacion;
+  }
+
   function descargarBlob(blob, nombre) {
     var url = URL.createObjectURL(blob);
     var enlace = document.createElement('a');
@@ -2115,7 +2136,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   function generarYDescargar(caso, clavePlantilla, etiqueta) {
     var zip = generarDocumento(clavePlantilla, caso);
-    var nombre = etiqueta + '_' + nombreArchivoSeguro(caso.rit) + '_' + nombreArchivoSeguro(caso.nombre) + '.docx';
+    var sigla = siglaTribunal(caso.tribunal);
+    var nombre = etiqueta + '_' + nombreArchivoSeguro(caso.rit) + '_' + nombreArchivoSeguro(caso.nombre) +
+      (sigla ? '_' + sigla : '') + '.docx';
     descargarBlob(zip.generate({ type: 'blob', mimeType: TIPO_DOCX, compression: 'DEFLATE' }), nombre);
     registrarGeneracion(caso, etiqueta);
     guardarAlmacen();
@@ -4568,7 +4591,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     sincronizarServicio: sincronizarServicio, cargarDesdeServicio: cargarDesdeServicio,
     textoDocumentos: textoDocumentos, htmlDesdeDocx: htmlDesdeDocx, motivoSugerido: motivoSugerido,
     plantillaDeMensaje: plantillaDeMensaje, plantillaDesdeTipo: plantillaDesdeTipo,
-    etiquetaTipoDocumento: etiquetaTipoDocumento, filtrarDesdeIndicador: filtrarDesdeIndicador
+    etiquetaTipoDocumento: etiquetaTipoDocumento, filtrarDesdeIndicador: filtrarDesdeIndicador,
+    siglaTribunal: siglaTribunal
   };
 
   // Permite dejar configurado a un funcionario con un solo enlace:
