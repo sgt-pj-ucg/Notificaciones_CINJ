@@ -1792,9 +1792,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       archivo: nombreArchivo, fecha: new Date().toISOString(), cargaId: cargaId,
       nuevos: 0, duplicados: 0, noNotificables: 0, conAvisos: 0, filas: 0, detalles: []
     };
-    var indice = {};
-    almacen.casos.forEach(function (c) { indice[claveCaso(c)] = c; });
-
     for (var f = indiceEncabezado + 1; f < filas.length; f++) {
       var fila = filas[f];
       if (!fila || !fila.length) continue;
@@ -1829,26 +1826,30 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         modificadoEn: new Date().toISOString()
       };
 
-      // A pedido de JC (24-08-2026): un RIT+correlativo que ya existe ya NO se salta —
-      // se carga siempre, como un caso nuevo aparte, pero marcado "duplicado" para que
-      // el funcionario decida si es un duplicado real o una diligencia nueva legítima
-      // para la misma causa. Se le da un correlativo sintético (mismo patrón que ya se
-      // usó en la importación histórica) para no pisar la fila original al sincronizar
-      // con la planilla compartida, que usa RIT+correlativo como llave de actualización.
-      var clave = claveCaso(caso);
-      if (indice[clave]) {
+      // Se necesita antes del chequeo de duplicado (que compara materia también).
+      caso.materia = clasificarMateria(caso.rit, caso.tribunal);
+
+      // A pedido de JC: un caso que ya existe no se salta — se carga siempre, como un
+      // caso nuevo aparte, pero marcado "duplicado" para que el funcionario decida si es
+      // un duplicado real o una diligencia nueva legítima. Se le da un correlativo
+      // sintético (mismo patrón que ya se usó en la importación histórica) para no pisar
+      // la fila original al sincronizar con la planilla compartida (que usa RIT+N° como
+      // llave de actualización, ver claveCaso() — no relacionado con este criterio).
+      // Criterio "duplicado" (actualizado 30-08-2026, ver esCausaDuplicada): deben
+      // coincidir los seis datos — RIT, Requerido, materia, tribunal, fecha de audiencia
+      // y N° — todos a la vez, no sólo RIT + N° como antes.
+      var coincidente = almacen.casos.find(function (existente) { return esCausaDuplicada(caso, existente); });
+      if (coincidente) {
         resumen.duplicados++;
         caso.duplicado = true;
         caso.correlativo = caso.correlativo + '-dup' + resumen.duplicados;
-        clave = claveCaso(caso);
         resumen.detalles.push({ rit: caso.rit, tipo: 'alerta',
-          texto: 'Coincide con una causa ya cargada (mismo RIT y correlativo): revisar si es un ' +
-            'duplicado real o una diligencia nueva.' });
+          texto: 'Coincide con una causa ya cargada (mismo RIT, Requerido, materia, tribunal, fecha de ' +
+            'audiencia y N°): revisar si es un duplicado real o una diligencia nueva.' });
       } else {
         caso.duplicado = false;
       }
 
-      caso.materia = clasificarMateria(caso.rit, caso.tribunal);
       var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
       caso.domicilioTribunal = encontrado.domicilio;
       caso.confianzaDomicilio = encontrado.confianza;
@@ -1879,7 +1880,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       }
 
       almacen.casos.push(caso);
-      indice[clave] = caso;
       resumen.nuevos++;
     }
 
@@ -1891,8 +1891,43 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return resumen;
   }
 
+  // Identidad técnica de una causa (RIT + N°): la usa fusionarCasos() como llave de
+  // actualización al sincronizar con la planilla compartida. No tocar este criterio —
+  // es distinto del criterio de "duplicado" de más abajo, que compara contenido.
   function claveCaso(caso) {
     return normalizar(caso.rit) + '|' + normalizar(caso.correlativo);
+  }
+
+  // Nombre en tokens, sin tildes/mayúsculas, para comparar con tolerancia a variaciones
+  // de escritura (a pedido de JC, 30-08-2026).
+  function tokensNombre(nombre) {
+    return normalizar(nombre).toUpperCase().replace(/[^A-Z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  }
+
+  // Dos nombres "probablemente la misma persona" si coinciden el primer nombre y los
+  // dos últimos apellidos, sin importar diferencias en segundos nombres o el orden en
+  // que se hayan digitado — mínimo pedido explícitamente por JC. Con menos de 3 palabras
+  // en alguno de los dos (nombre demasiado corto para aplicar esa regla) exige coincidencia
+  // exacta de todos los tokens.
+  function nombreProbablementeIgual(nombreA, nombreB) {
+    var a = tokensNombre(nombreA), b = tokensNombre(nombreB);
+    if (!a.length || !b.length) return false;
+    if (a.length < 3 || b.length < 3) return a.join(' ') === b.join(' ');
+    return a[0] === b[0] && a[a.length - 2] === b[b.length - 2] && a[a.length - 1] === b[b.length - 1];
+  }
+
+  // Criterio de "duplicado" al cargar Planilla 1 (actualizado a pedido de JC,
+  // 30-08-2026): antes bastaba con que coincidieran RIT + N°; ahora exige que
+  // coincidan los seis datos — RIT, Requerido (nombre, con la tolerancia de arriba),
+  // materia, tribunal, fecha de audiencia y N° (correlativo) — todos a la vez.
+  function esCausaDuplicada(caso, existente) {
+    return normalizar(caso.rit) === normalizar(existente.rit) &&
+      normalizar(caso.correlativo) === normalizar(existente.correlativo) &&
+      caso.materia === existente.materia &&
+      normalizar(caso.tribunal) === normalizar(existente.tribunal) &&
+      (caso.fechaAudiencia || '') === (existente.fechaAudiencia || '') &&
+      nombreProbablementeIgual(caso.nombre, existente.nombre);
   }
 
   /* =========================================================
@@ -4576,7 +4611,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     textoDocumentos: textoDocumentos, htmlDesdeDocx: htmlDesdeDocx, motivoSugerido: motivoSugerido,
     plantillaDeMensaje: plantillaDeMensaje, plantillaDesdeTipo: plantillaDesdeTipo,
     etiquetaTipoDocumento: etiquetaTipoDocumento, filtrarDesdeIndicador: filtrarDesdeIndicador,
-    siglaTribunal: siglaTribunal
+    siglaTribunal: siglaTribunal, esCausaDuplicada: esCausaDuplicada,
+    nombreProbablementeIgual: nombreProbablementeIgual, tokensNombre: tokensNombre
   };
 
   // Permite dejar configurado a un funcionario con un solo enlace:
