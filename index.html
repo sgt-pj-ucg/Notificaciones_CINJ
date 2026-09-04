@@ -954,7 +954,11 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
     <div class="rejilla rejilla-4" id="indicadores"></div>
 
     <div class="tarjeta" style="margin-top:var(--e3)">
-      <div class="tarjeta-titulo">Avance del proceso</div>
+      <div class="tarjeta-titulo">Documentos generados desde la plataforma</div>
+      <p class="campo-ayuda">Mide si ya se generó un Word (Mensaje o Certificación) con el botón
+        "Generar" de esta plataforma — no si la causa ya tiene resultado. Una causa del histórico o
+        gestionada por fuera puede tener resultado registrado sin haber generado nada aquí; para el
+        resultado, vea los indicadores de arriba.</p>
       <div class="barra-avance" id="barraAvance"></div>
       <div class="leyenda" id="leyendaAvance"></div>
     </div>
@@ -2827,6 +2831,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return valor || 'Sin registrar';
   }
 
+  // Etiqueta más clara para la leyenda de "Documentos generados desde la plataforma"
+  // (a pedido de JC, 04-09-2026): caso.estado sólo mira si ya se generó un documento
+  // desde acá, no si la causa tiene resultado — con nombres como "Datos completos" se
+  // confundía con los indicadores de arriba, que sí miran el resultado. El valor
+  // interno (caso.estado, ESTADOS.*) no cambia — se sigue usando igual en filtros y
+  // en la sincronización —, sólo cambia cómo se muestra en esa leyenda puntual.
+  function etiquetaEstadoAvance(estado) {
+    if (estado === ESTADOS.COMPLETOS) return 'Notificable, sin generar aquí';
+    if (estado === ESTADOS.GENERADA) return 'Generado desde la plataforma';
+    return estado;   // "Recibido" y "No notificable" ya son claros tal cual
+  }
+
   // Etiqueta legible del filtro activo, para el chip sobre la lista de casos.
   function etiquetaFiltroActivo() {
     if (filtros.sinResultado) return 'Pendientes de diligencia';
@@ -3822,7 +3838,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     }).join('') : '<div style="width:100%;background:#E8EEF5"></div>';
     $('#leyendaAvance').innerHTML = segmentos.map(function (s) {
       return '<span><i class="punto" style="background:' + s.color + '"></i>' +
-        escapar(s.estado) + ' · ' + (cuenta[s.estado] || 0) + '</span>';
+        escapar(etiquetaEstadoAvance(s.estado)) + ' · ' + (cuenta[s.estado] || 0) + '</span>';
     }).join('');
 
     $('#tituloVistaControl').textContent = 'Vista de control (' +
@@ -4804,6 +4820,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     textoDocumentos: textoDocumentos, htmlDesdeDocx: htmlDesdeDocx, motivoSugerido: motivoSugerido,
     plantillaDeMensaje: plantillaDeMensaje, plantillaDesdeTipo: plantillaDesdeTipo,
     etiquetaTipoDocumento: etiquetaTipoDocumento, filtrarDesdeIndicador: filtrarDesdeIndicador,
+    etiquetaEstadoAvance: etiquetaEstadoAvance,
     siglaTribunal: siglaTribunal, esCausaDuplicada: esCausaDuplicada,
     nombreProbablementeIgual: nombreProbablementeIgual, tokensNombre: tokensNombre,
     estandarizarTribunales: estandarizarTribunales
