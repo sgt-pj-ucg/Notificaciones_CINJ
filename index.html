@@ -1774,7 +1774,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return mapa;
   }
 
-  function procesarLibro(datosArchivo, nombreArchivo) {
+  // Primera mitad de la ingesta (a pedido de JC, 04-09-2026): lee y prepara las filas
+  // del Excel EN MEMORIA, calculando todo lo que no depende de una decisión del
+  // funcionario (materia, sugerencia de tribunal estandarizado, avisos de teléfono/
+  // nombre) — pero sin tocar almacen.casos todavía. Así se puede mostrar una vista
+  // previa donde revisar y corregir el tribunal antes de cargar de verdad a la
+  // plataforma. confirmarIngesta() es la que efectivamente guarda.
+  function prepararIngesta(datosArchivo, nombreArchivo) {
     var libro = XLSX.read(datosArchivo, { type: 'array', cellDates: true });
     var hoja = libro.Sheets[libro.SheetNames[0]];
     if (!hoja) throw new Error('El archivo no contiene hojas legibles.');
@@ -1797,17 +1803,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     // Identifica esta carga puntual (no el archivo por nombre, que podría
     // repetirse) para poder deshacerla completa más adelante si corresponde.
     var cargaId = idUnico();
-    var resumen = {
-      archivo: nombreArchivo, fecha: new Date().toISOString(), cargaId: cargaId,
-      nuevos: 0, duplicados: 0, noNotificables: 0, conAvisos: 0, filas: 0, detalles: []
-    };
+    var previstas = [];   // acumula lo ya preparado, para detectar duplicados dentro del mismo archivo
+
     for (var f = indiceEncabezado + 1; f < filas.length; f++) {
       var fila = filas[f];
       if (!fila || !fila.length) continue;
       var leer = function (clave) { return mapa[clave] === undefined ? null : fila[mapa[clave]]; };
       var rit = String(leer('rit') || '').trim();
       if (!rit) continue;
-      resumen.filas++;
 
       var caso = {
         id: idUnico(),
@@ -1835,24 +1838,64 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         modificadoEn: new Date().toISOString()
       };
 
-      // Se necesita antes del chequeo de duplicado (que compara materia también).
       caso.materia = clasificarMateria(caso.rit, caso.tribunal);
 
-      // Estandariza el nombre del tribunal a la forma del catálogo cuando la coincidencia
-      // es de alta confianza (a pedido de JC, 03-09-2026): la Planilla 1 trae el mismo
-      // tribunal escrito de formas distintas ("Juzgado Garantía Coquimbo", "Juzgado de
-      // Garantía de Coquimbo"...) y aparecía más de una vez en los gráficos y filtros por
-      // tribunal. Con confianza baja o sin coincidencia se deja el texto tal cual llegó,
-      // para no adivinar. Va antes del chequeo de duplicado para que también compare
-      // sobre el nombre ya estandarizado.
+      // Sugerencia de tribunal estandarizado (mismo criterio que ya existía): con alta
+      // confianza se aplica sola; con confianza baja o sin coincidencia se deja el texto
+      // tal cual, para no adivinar — el funcionario lo revisa en la vista previa.
       // OJO: "esAlias" excluye la rama de domicilio corregido a mano — esa rama devuelve
       // "definido manualmente" en "coincidencia" (una descripción, no un nombre de
       // tribunal) y NUNCA debe usarse para reemplazar caso.tribunal (bug real corregido
-      // el 04-09-2026: corrompió el nombre de varias causas — ver esCorrupcionTribunal()).
+      // el 04-09-2026: corrompió el nombre de varias causas).
       var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
       if (!encontrado.esAlias && encontrado.confianza === 'alta' && encontrado.coincidencia) {
         caso.tribunal = encontrado.coincidencia;
       }
+      caso.domicilioTribunal = encontrado.domicilio;
+      caso.confianzaDomicilio = encontrado.confianza;
+
+      recalcularEstado(caso);
+
+      // Advertencias por fila, para la vista previa. El chequeo de "duplicado" acá es
+      // sólo informativo (contra lo ya cargado + lo ya revisado de este mismo archivo) —
+      // confirmarIngesta() lo vuelve a calcular en firme al momento de guardar, porque el
+      // tribunal puede cambiar en la revisión y el criterio de duplicado depende de él.
+      var advertencias = [];
+      if (!caso.nombre || nombreDudoso(caso.nombre)) advertencias.push('Requerido no individualizado');
+      var telefono = analizarTelefono(caso.telefono);
+      if (telefono.vacio) advertencias.push('Sin teléfono');
+      else if (telefono.avisos.length) advertencias.push(telefono.avisos[0]);
+      if (!encontrado.esAlias && encontrado.confianza !== 'alta') {
+        advertencias.push(caso.tribunal
+          ? (encontrado.confianza === 'sin' ? 'Tribunal no reconocido en el catálogo'
+            : 'Tribunal no estandarizado — ¿es "' + encontrado.coincidencia + '"?')
+          : 'Sin tribunal');
+      }
+      var posibleDuplicado = almacen.casos.concat(previstas).some(function (existente) {
+        return esCausaDuplicada(caso, existente);
+      });
+      if (posibleDuplicado) advertencias.push('Posible duplicado de una causa ya cargada o de otra fila de este archivo');
+      caso.advertencias = advertencias;
+
+      previstas.push(caso);
+    }
+
+    return { archivo: nombreArchivo, cargaId: cargaId, filas: previstas };
+  }
+
+  // Segunda mitad de la ingesta: guarda de verdad en almacen.casos las filas ya
+  // preparadas por prepararIngesta() (con el tribunal ya revisado/corregido por el
+  // funcionario en la vista previa, si corresponde). Vuelve a calcular materia,
+  // domicilio y — sobre todo — el chequeo de duplicado, porque el tribunal pudo cambiar.
+  function confirmarIngesta(paquete) {
+    var resumen = {
+      archivo: paquete.archivo, fecha: new Date().toISOString(), cargaId: paquete.cargaId,
+      nuevos: 0, duplicados: 0, noNotificables: 0, conAvisos: 0, filas: paquete.filas.length, detalles: []
+    };
+    paquete.filas.forEach(function (caso) {
+      caso.tribunal = String(caso.tribunal || '').trim();
+      caso.materia = clasificarMateria(caso.rit, caso.tribunal);
+      var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
       caso.domicilioTribunal = encontrado.domicilio;
       caso.confianzaDomicilio = encontrado.confianza;
 
@@ -1862,9 +1905,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       // sintético (mismo patrón que ya se usó en la importación histórica) para no pisar
       // la fila original al sincronizar con la planilla compartida (que usa RIT+N° como
       // llave de actualización, ver claveCaso() — no relacionado con este criterio).
-      // Criterio "duplicado" (actualizado 30-08-2026, ver esCausaDuplicada): deben
-      // coincidir los seis datos — RIT, Requerido, materia, tribunal, fecha de audiencia
-      // y N° — todos a la vez, no sólo RIT + N° como antes.
+      // Criterio "duplicado" (ver esCausaDuplicada): deben coincidir los seis datos —
+      // RIT, Requerido, materia, tribunal, fecha de audiencia y N° — todos a la vez.
       var coincidente = almacen.casos.find(function (existente) { return esCausaDuplicada(caso, existente); });
       if (coincidente) {
         resumen.duplicados++;
@@ -1903,9 +1945,10 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
             'sugerido por aproximación (' + encontrado.coincidencia + '): verificar') });
       }
 
+      delete caso.advertencias;   // sólo era para la vista previa, no se guarda en el caso
       almacen.casos.push(caso);
       resumen.nuevos++;
-    }
+    });
 
     // El historial se guarda sin el detalle de avisos (sólo interesa en la pantalla de la carga)
     // y acotado, para no llenar el almacenamiento del navegador con el uso diario.
@@ -1913,6 +1956,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     almacen.cargas = almacen.cargas.slice(0, 40);
     guardarAlmacen();
     return resumen;
+  }
+
+  // Ingesta directa, sin vista previa (se mantiene para pruebas/uso programático):
+  // prepara y confirma de un solo golpe, aceptando el tribunal tal como llegó del Excel.
+  function procesarLibro(datosArchivo, nombreArchivo) {
+    return confirmarIngesta(prepararIngesta(datosArchivo, nombreArchivo));
   }
 
   // Identidad técnica de una causa (RIT + N°): la usa fusionarCasos() como llave de
@@ -4516,10 +4565,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var lector = new FileReader();
     lector.onload = function () {
       try {
-        var resumen = procesarLibro(new Uint8Array(lector.result), archivo.name);
-        pintarResultadoIngesta(resumen);
-        refrescar();
-        mostrarMensaje(resumen.nuevos + ' caso(s) nuevo(s) incorporado(s).', 'ok');
+        var paquete = prepararIngesta(new Uint8Array(lector.result), archivo.name);
+        if (!paquete.filas.length) {
+          $('#resultadoIngesta').innerHTML = '<div class="tarjeta"><div class="aviso aviso-error"><div>' +
+            'El archivo no tiene filas con RIT para cargar.</div></div></div>';
+          return;
+        }
+        pintarPrevisualizacionIngesta(paquete);
       } catch (e) {
         $('#resultadoIngesta').innerHTML = '<div class="tarjeta"><div class="aviso aviso-error"><div>' +
           escapar('No se pudo leer la planilla: ' + e.message) + '</div></div></div>';
@@ -4528,6 +4580,62 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     };
     lector.onerror = function () { mostrarMensaje('No se pudo abrir el archivo.', 'error'); };
     lector.readAsArrayBuffer(archivo);
+  }
+
+  // Vista previa (a pedido de JC, 04-09-2026): antes de cargar de verdad a la
+  // plataforma, se revisan las filas leídas del Excel — sobre todo el tribunal, con un
+  // campo editable (autocompletado con el catálogo) para corregirlo antes de guardar.
+  function pintarPrevisualizacionIngesta(paquete) {
+    var filas = paquete.filas;
+    var conAdvertencias = filas.filter(function (c) { return c.advertencias.length; }).length;
+    $('#resultadoIngesta').innerHTML = '<div class="tarjeta">' +
+      '<div class="tarjeta-titulo">Vista previa · ' + escapar(paquete.archivo) + '</div>' +
+      '<p class="campo-ayuda">Revise especialmente el tribunal de las filas marcadas — corríjalo aquí ' +
+      'mismo si no quedó bien escrito (el catálogo aparece como sugerencia al escribir). Nada de esto ' +
+      'se guarda todavía.</p>' +
+      '<div class="rejilla rejilla-2" style="margin-bottom:var(--e3)">' +
+      '<div class="indicador"><div class="indicador-valor">' + filas.length +
+        '</div><div class="indicador-etiqueta">Filas leídas</div></div>' +
+      '<div class="indicador ' + (conAdvertencias ? 'ambar' : 'verde') + '"><div class="indicador-valor">' +
+        conAdvertencias + '</div><div class="indicador-etiqueta">Con advertencias</div></div>' +
+      '</div>' +
+      '<datalist id="listaTribunalesPreview">' + almacen.tribunales.map(function (t) {
+        return '<option value="' + escapar(t.nombre) + '">';
+      }).join('') + '</datalist>' +
+      '<div class="tabla-envoltorio"><table class="tabla"><thead><tr>' +
+      '<th>RIT</th><th>Requerido</th><th>Tribunal</th><th>Fecha audiencia</th><th>Advertencias</th>' +
+      '</tr></thead><tbody>' + filas.map(function (c, i) {
+        return '<tr' + (c.advertencias.length ? ' class="fila-duplicada"' : '') + '>' +
+          '<td class="celda-rit">' + escapar(c.rit) + '</td>' +
+          '<td class="celda-corta">' + escapar(c.nombre || '—') + '</td>' +
+          '<td><input type="text" list="listaTribunalesPreview" data-previa-tribunal="' + i +
+            '" value="' + escapar(c.tribunal) + '" style="width:100%"></td>' +
+          '<td>' + escapar(fechaCorta(c.fechaAudiencia) || '—') + '</td>' +
+          '<td>' + (c.advertencias.length
+            ? c.advertencias.map(function (a) { return '<div class="campo-ayuda" style="color:var(--ambar)">' +
+                escapar(a) + '</div>'; }).join('')
+            : '<span style="color:var(--verde)">✓ Sin observaciones</span>') + '</td>' +
+          '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div style="display:flex; gap:var(--e2); margin-top:var(--e3)">' +
+      '<button class="boton boton-acento" type="button" id="btnConfirmarIngesta">Cargar ' + filas.length +
+        ' causa(s) a la plataforma</button>' +
+      '<button class="boton boton-secundario" type="button" id="btnCancelarIngesta">Cancelar</button>' +
+      '</div></div>';
+
+    $('#btnCancelarIngesta').addEventListener('click', function () {
+      $('#resultadoIngesta').innerHTML = '';
+    });
+    $('#btnConfirmarIngesta').addEventListener('click', function () {
+      $$('[data-previa-tribunal]').forEach(function (campo) {
+        var idx = parseInt(campo.getAttribute('data-previa-tribunal'), 10);
+        paquete.filas[idx].tribunal = campo.value.trim();
+      });
+      var resumen = confirmarIngesta(paquete);
+      pintarResultadoIngesta(resumen);
+      refrescar();
+      mostrarMensaje(resumen.nuevos + ' caso(s) nuevo(s) incorporado(s).', 'ok');
+    });
   }
 
   function conectarEventos() {
@@ -4681,7 +4789,9 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 
   // Expuesto para la verificación automatizada del archivo construido.
   window.CINJ = {
-    almacen: almacen, procesarLibro: procesarLibro, generarDocumento: generarDocumento,
+    almacen: almacen, procesarLibro: procesarLibro, prepararIngesta: prepararIngesta,
+    confirmarIngesta: confirmarIngesta, pintarPrevisualizacionIngesta: pintarPrevisualizacionIngesta,
+    generarDocumento: generarDocumento,
     textoDesdeDocx: textoDesdeDocx, analizarTelefono: analizarTelefono, runValido: runValido,
     clasificarMateria: clasificarMateria, buscarTribunal: buscarTribunal, filaControl: filaControl,
     refrescar: refrescar, ESTADOS: ESTADOS, faltantesDeCaso: faltantesDeCaso,
