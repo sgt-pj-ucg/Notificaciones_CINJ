@@ -1384,8 +1384,11 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var texto = normalizar(nombre);
     if (!texto) return { domicilio: '', confianza: 'sin', coincidencia: '' };
 
+    // "esAlias" distingue esta rama: el domicilio se corrigió a mano para ESTE texto tal
+    // cual, no hay un nombre canónico de catálogo asociado — "coincidencia" es sólo una
+    // descripción para mostrar, nunca debe usarse como nombre de tribunal estandarizado.
     if (alias && alias[texto]) {
-      return { domicilio: alias[texto], confianza: 'alta', coincidencia: 'definido manualmente' };
+      return { domicilio: alias[texto], confianza: 'alta', coincidencia: 'definido manualmente', esAlias: true };
     }
 
     var localidad = LOCALIDADES.find(function (l) { return texto.indexOf(l) >= 0; }) || '';
@@ -1416,7 +1419,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     return {
       domicilio: mejor.tribunal.domicilio,
       confianza: mejor.puntaje >= 6 ? 'alta' : 'baja',
-      coincidencia: mejor.tribunal.nombre
+      coincidencia: mejor.tribunal.nombre,
+      esAlias: false
     };
   }
 
@@ -1841,8 +1845,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       // tribunal. Con confianza baja o sin coincidencia se deja el texto tal cual llegó,
       // para no adivinar. Va antes del chequeo de duplicado para que también compare
       // sobre el nombre ya estandarizado.
+      // OJO: "esAlias" excluye la rama de domicilio corregido a mano — esa rama devuelve
+      // "definido manualmente" en "coincidencia" (una descripción, no un nombre de
+      // tribunal) y NUNCA debe usarse para reemplazar caso.tribunal (bug real corregido
+      // el 04-09-2026: corrompió el nombre de varias causas — ver esCorrupcionTribunal()).
       var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
-      if (encontrado.confianza === 'alta' && encontrado.coincidencia) {
+      if (!encontrado.esAlias && encontrado.confianza === 'alta' && encontrado.coincidencia) {
         caso.tribunal = encontrado.coincidencia;
       }
       caso.domicilioTribunal = encontrado.domicilio;
@@ -4619,11 +4627,30 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   // distinto al catálogo pero se reconoce con alta confianza (a pedido de JC,
   // 03-09-2026 — mismo criterio que ya se aplica a las cargas nuevas en procesarLibro).
   // Es una acción explícita, no automática, para que JC vea cuántas causas cambiaron.
+  var MARCADOR_TRIBUNAL_CORROMPIDO = 'definido manualmente';
+
   function estandarizarTribunales() {
-    var corregidas = 0;
+    var corregidas = 0, reparadas = 0, sinRecuperar = 0;
     almacen.casos.forEach(function (caso) {
+      // Repara el daño de una versión anterior de esta función (bug real, corregido
+      // 04-09-2026): el nombre del tribunal quedaba pisado por "definido manualmente"
+      // en causas cuyo domicilio ya estaba memorizado como alias — esa rama de
+      // buscarTribunal() devuelve una descripción, no un nombre. Se recupera cruzando
+      // el domicilio (nunca se tocó) contra el catálogo.
+      if (caso.tribunal === MARCADOR_TRIBUNAL_CORROMPIDO) {
+        var recuperado = almacen.tribunales.find(function (t) { return t.domicilio === caso.domicilioTribunal; });
+        if (recuperado) {
+          caso.tribunal = recuperado.nombre;
+          caso.modificadoEn = new Date().toISOString();
+          reparadas++;
+        } else {
+          sinRecuperar++;
+          return;   // sigue corrompida: no hay de dónde recuperar el nombre real.
+        }
+      }
       var encontrado = buscarTribunal(caso.tribunal, almacen.tribunales, almacen.aliasTribunales);
-      if (encontrado.confianza === 'alta' && encontrado.coincidencia && encontrado.coincidencia !== caso.tribunal) {
+      if (!encontrado.esAlias && encontrado.confianza === 'alta' && encontrado.coincidencia &&
+          encontrado.coincidencia !== caso.tribunal) {
         caso.tribunal = encontrado.coincidencia;
         caso.domicilioTribunal = encontrado.domicilio;
         caso.confianzaDomicilio = encontrado.confianza;
@@ -4631,10 +4658,25 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
         corregidas++;
       }
     });
-    if (!corregidas) { mostrarMensaje('No había nombres de tribunal por estandarizar.', ''); return; }
+    var total = corregidas + reparadas;
+    if (!total) {
+      mostrarMensaje(sinRecuperar
+        ? sinRecuperar + ' causa(s) sin nombre de tribunal recuperable — hay que corregirlas a mano ' +
+          '(buscar "' + MARCADOR_TRIBUNAL_CORROMPIDO + '" en Gestionar diligencias).'
+        : 'No había nombres de tribunal por estandarizar.', sinRecuperar ? 'error' : '');
+      return;
+    }
     guardarAlmacen();
     refrescar();
-    mostrarMensaje(corregidas + ' causa(s) con el nombre del tribunal estandarizado.', 'ok');
+    var partes = [];
+    if (reparadas) partes.push(reparadas + ' recuperada(s) de una corrección anterior con error');
+    if (corregidas) partes.push(corregidas + ' estandarizada(s)');
+    var mensaje = partes.join(', ') + '.';
+    if (sinRecuperar) {
+      mensaje += ' ' + sinRecuperar + ' sin poder recuperar el nombre — corregirlas a mano ' +
+        '(buscar "' + MARCADOR_TRIBUNAL_CORROMPIDO + '").';
+    }
+    mostrarMensaje(mensaje, sinRecuperar ? 'error' : 'ok');
   }
 
   // Expuesto para la verificación automatizada del archivo construido.
