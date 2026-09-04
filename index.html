@@ -727,6 +727,13 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
 }
 
 @media print {
+  /* Sin esto, Chrome/Edge omiten los background-color al imprimir/guardar como PDF
+     (a menos que el usuario marque "Gráficos de fondo" en el diálogo, algo que casi
+     nadie hace) — la barra de "Composición de resultados", las barras de "Causas por
+     tribunal" y los puntos de leyenda usan background-color, así que salían en blanco,
+     sin ningún color (bug real reportado por JC, 04-09-2026: "el PDF sale muy mal"). */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
   /* #vistaImpresion vive dentro de .app-protegida (no es hijo directo de
      <body>), así que ocultar "todo lo que no sea .vista-impresion" con un
      selector body > *:not(...) ocultaba a .app-protegida entero — y con él,
@@ -741,6 +748,16 @@ table.tabla th.columna-ordenable:hover { color: var(--acento); }
   }
   .vista-impresion-barra, .aviso-fidelidad { display: none !important; }
   .hoja-impresion { box-shadow: none; margin: 0; width: auto; max-width: none; min-height: 0; }
+
+  /* Las secciones con tabla larga (crecen con la cantidad de fechas/semanas, a
+     diferencia de las tarjetas de KPI o de ranking, que son de alto fijo) no deben
+     forzarse a "no partir entre páginas": si no caben en una sola página, esa regla
+     las empuja a saltos raros o las corta a la fuerza. Se deja que corten entre filas,
+     con el encabezado repetido en cada página nueva. */
+  .informe-seccion-tabla { break-inside: auto; }
+  .informe-seccion-tabla table.informe-tabla thead { display: table-header-group; }
+  .informe-seccion-tabla table.informe-tabla tr { break-inside: avoid; }
+  .informe-ranking-fila { break-inside: avoid; }
 }
 
 </style>
@@ -4359,7 +4376,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       ' por diligenciar y ' + m.noNotificables + ' con falta de información — suman ' + m.total + '.</p></div>';
 
     var dias = m.diasOrdenados;
-    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Tendencia de gestiones (por día)</div>' +
+    html += '<div class="informe-seccion informe-seccion-tabla"><div class="informe-seccion-titulo">Tendencia de gestiones (por día)</div>' +
       (dias.length
         ? '<table class="informe-tabla"><thead><tr><th>Fecha</th><th class="num">Positiva</th>' +
           '<th class="num">Negativa</th><th class="num">Con observaciones</th><th class="num">Total</th></tr></thead><tbody>' +
@@ -4380,7 +4397,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       return acc + b.Positiva + b.Negativa + b['No realizada'] + b.Pendiente + b.FaltaInformacion;
     }, 0);
     var unidadLectura = periodo === 'dia' ? 'día(s)' : periodo === 'mes' ? 'mes(es)' : 'semana(s)';
-    html += '<div class="informe-seccion"><div class="informe-seccion-titulo">Causas por fecha de carga</div>' +
+    html += '<div class="informe-seccion informe-seccion-tabla"><div class="informe-seccion-titulo">Causas por fecha de carga</div>' +
       (dCargas.claves.length
         ? '<table class="informe-tabla"><thead><tr><th>' + unidadCargas + '</th><th class="num">Positiva</th>' +
           '<th class="num">Negativa</th><th class="num">Con obs.</th><th class="num">Pendiente</th>' +
